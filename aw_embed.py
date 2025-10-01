@@ -13,7 +13,7 @@ class AfterWorkEmbed(commands.Cog, name="AfterWorkEmbed"):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=123456789, force_registration=True)
 
-    @commands.command()
+    @commands.command(name="awembed")
     async def embed(self, ctx: commands.Context, channel: discord.TextChannel, *, data: str):
         """
         Sends a custom embed message to a specified channel.
@@ -42,14 +42,3 @@ class AfterWorkEmbed(commands.Cog, name="AfterWorkEmbed"):
 async def setup(bot):
     aw_embed_cog = AfterWorkEmbed(bot)
     await bot.add_cog(aw_embed_cog)
-
-    # Wait until the bot is ready to ensure all cogs are loaded
-    await bot.wait_until_ready()
-    
-    # Get the primary cog and its base command
-    primary_cog = bot.get_cog("AfterWorkBase")
-    if primary_cog:
-        base_command = primary_cog.afterworktest_base
-        base_command.add_command(aw_embed_cog.embed)
-    else:
-        log.error("Could not find the AfterWorkBase cog to attach commands.")
