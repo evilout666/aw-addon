@@ -46,4 +46,4 @@ class AfterWork(commands.Cog):
 		await ctx.send(embed=embed)
 
 async def setup(bot):
-	await bot.add_cog(AfterWorkBase(bot))
+	await bot.add_cog(AfterWork(bot))
