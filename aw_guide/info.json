@@ -1,0 +1,10 @@
+{
+  "author": ["evilout666"],
+  "description": "A guide to the cogs in the AWCogs repo, with management buttons.",
+  "install_msg": "Thanks for installing the AWCogs guide. Use `[p]aw_guide` to see a list of all cogs in this repo and manage them.",
+  "short": "A guide for the AWCogs repository.",
+  "end_user_data_statement": "No end user data is stored.",
+  "min_bot_version": "3.5.0",
+  "min_python_version": [3, 8, 0],
+  "tags": ["afterwork", "utility", "tools", "guide"]
+}

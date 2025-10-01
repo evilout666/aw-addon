@@ -161,7 +161,114 @@ class AfterWork(commands.Cog):
         
         for name, info in sorted(cog_states.items()):
             status = "✅ Loaded" if info['loaded'] else "❌ Unloaded"
-            embed.add_field(name=name, value=f"{info['description']}\n*Status: {status}*", inline=False)
+            import discord
+from redbot.core import commands, Config
+from redbot.core.bot import Red
+import os
+import json
+import logging
+
+log = logging.getLogger("red.AWCogs.aw_guide")
+
+# A static list of the cogs we know are in this repository
+# We will generate a message for each of these.
+AW_COGS_LIST = ["aw_embed", "aw_permissions", "aw_private", "aw_tv", "aw_voice"]
+
+class CogButtonView(discord.ui.View):
+    """
+    A view that provides Install, Load, and Unload buttons for a specific cog.
+    """
+    def __init__(self, bot: Red, cog_name: str):
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.cog_name = cog_name
+        # The custom_id for each button includes the cog_name to make it unique.
+        self.add_item(discord.ui.Button(label="Install", style=discord.ButtonStyle.green, custom_id=f"install_{cog_name}"))
+        self.add_item(discord.ui.Button(label="Load", style=discord.ButtonStyle.primary, custom_id=f"load_{cog_name}"))
+        self.add_item(discord.ui.Button(label="Unload", style=discord.ButtonStyle.secondary, custom_id=f"unload_{cog_name}"))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # Only allow the server owner to interact with these buttons.
+        if not await self.bot.is_owner(interaction.user):
+            await interaction.response.send_message("You do not have permission to use these buttons.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Install", style=discord.ButtonStyle.green)
+    async def install_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        cog_name = button.custom_id.split("_")[1]
+        await interaction.response.defer()
+        # We find the command and invoke it on behalf of the user.
+        cmd = self.bot.get_command(f"repo install AWCogs {cog_name}")
+        if cmd:
+            await self.bot.invoke(interaction, cmd)
+            await interaction.followup.send(f"Attempted to run `!repo install AWCogs {cog_name}`.", ephemeral=True)
+        else:
+            await interaction.followup.send("Could not find the `repo install` command.", ephemeral=True)
+
+    @discord.ui.button(label="Load", style=discord.ButtonStyle.primary)
+    async def load_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        cog_name = button.custom_id.split("_")[1]
+        await interaction.response.defer()
+        cmd = self.bot.get_command(f"load {cog_name}")
+        if cmd:
+            await self.bot.invoke(interaction, cmd)
+            await interaction.followup.send(f"Attempted to run `!load {cog_name}`.", ephemeral=True)
+        else:
+            await interaction.followup.send("Could not find the `load` command.", ephemeral=True)
+
+    @discord.ui.button(label="Unload", style=discord.ButtonStyle.secondary)
+    async def unload_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        cog_name = button.custom_id.split("_")[1]
+        await interaction.response.defer()
+        cmd = self.bot.get_command(f"unload {cog_name}")
+        if cmd:
+            await self.bot.invoke(interaction, cmd)
+            await interaction.followup.send(f"Attempted to run `!unload {cog_name}`.", ephemeral=True)
+        else:
+            await interaction.followup.send("Could not find the `unload` command.", ephemeral=True)
+
+
+class AWGuide(commands.Cog):
+    """A guide to the cogs in the AWCogs repo, with management buttons."""
+
+    def __init__(self, bot: Red):
+        self.bot = bot
+        # We need to add the persistent view on cog load so buttons work after a restart.
+        for cog_name in AW_COGS_LIST:
+            self.bot.add_view(CogButtonView(self.bot, cog_name))
+
+    @commands.command(name="aw_guide")
+    @commands.is_owner()
+    async def aw_guide_command(self, ctx: commands.Context):
+        """Displays a guide for all cogs in the AWCogs repo."""
+        await ctx.send("Below is a list of cogs available in this repository.")
+        
+        repo_path = os.path.dirname(os.path.dirname(__file__))
+
+        for cog_name in sorted(AW_COGS_LIST):
+            info_path = os.path.join(repo_path, cog_name, 'info.json')
+            
+            if os.path.exists(info_path):
+                with open(info_path) as f:
+                    info = json.load(f)
+                
+                description = info.get('long_description', info.get('short', 'No description available.'))
+                
+                embed = discord.Embed(
+                    title=f"⚙️ {cog_name}",
+                    description=description,
+                    color=await ctx.embed_color()
+                )
+                
+                view = CogButtonView(self.bot, cog_name)
+                await ctx.send(embed=embed, view=view)
+            else:
+                await ctx.send(f"Could not find `info.json` for `{cog_name}`.")
+
+async def setup(bot: Red):
+    await bot.add_cog(AWGuide(bot))
+
             
         view = CogManagerView(self.bot, cog_states)
         await ctx.send(embed=embed, view=view)
