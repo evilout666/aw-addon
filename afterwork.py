@@ -1,18 +1,16 @@
 # Red Bot Cog: afterwork
 # Goal: Provide a base for test commands and add an owner-only automation 
-# command to pull latest files from GitHub and update cogs in Red.
+# command to trigger a global cog update.
+# NOTE: This version is simplified for a PUBLIC GITHUB REPOSITORY setup.
 
-import asyncio
-import os
 import discord
 from redbot.core import commands, Config
 import logging
 
 log = logging.getLogger("red.afterwork.base")
 
-# IMPORTANT: This path is set to the location where the Unraid directory
-# /mnt/disk1/data/github/redbot is mounted INSIDE the Red Bot container.
-REPO_PATH_INSIDE_CONTAINER = "/home/cogs"
+# The REPO_PATH_INSIDE_CONTAINER variable and git logic are no longer needed
+# because Red Bot's Downloader handles public GitHub URLs directly.
 
 class Afterwork(commands.Cog, name="Afterwork"):
     """
@@ -29,7 +27,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
         """
         Displays a custom help menu for the Afterwork commands.
         """
-        # Ensure all subcommands are loaded before building the embed
         await self.bot.wait_until_ready()
 
         embed = discord.Embed(
@@ -39,9 +36,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
         )
         embed.set_footer(text="Afterwork Cogs")
 
-        # Dynamically get subcommands and add them to the embed
         if self.afterwork_base.commands:
-            # Include the 'update' command in the menu
             for cmd in sorted(self.afterwork_base.commands, key=lambda c: c.name):
                 embed.add_field(
                     name=f"`{cmd.name}`",
@@ -61,79 +56,31 @@ class Afterwork(commands.Cog, name="Afterwork"):
     @commands.is_owner()
     async def afterwork_update(self, ctx: commands.Context):
         """
-        Pulls latest files from GitHub and reloads installed cogs.
+        Triggers Red Bot's built-in cog update and reload process.
         
-        This combines git pull (using the container path) and Red's cogupdate 
-        command for one-step deployment.
+        This assumes the repository is public and registered via 
+        `!downloader repo add <URL>`.
         """
         status_message = await ctx.send("Starting automation sequence...")
         
-        # --- 1. Perform Git Pull ---
-        await status_message.edit(content="➡️ **Step 1/2: Pulling latest changes from GitHub...**")
-
-        # Check if Git is available in the environment
-        if not await self._is_git_available():
-            await ctx.send("ERROR: Git command not found in this environment. Cannot pull new files.")
-            return
-
-        try:
-            # Ensure we are in the correct directory before pulling
-            # We use the container's path for internal shell commands
-            os.chdir(REPO_PATH_INSIDE_CONTAINER)
-            
-            # Execute git pull
-            process = await asyncio.create_subprocess_shell(
-                "git pull",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
-            
-            output = stdout.decode().strip()
-            error = stderr.decode().strip()
-
-            if process.returncode != 0:
-                await status_message.edit(content=f"❌ **Step 1/2 Failed (Git Pull):**\n```bash\n{error or output}\n```\nCheck the container path and permissions.")
-                return
-
-            await status_message.edit(content=f"✅ **Step 1/2 Complete (Git Pull):**\n```bash\n{output}\n```")
-
-        except FileNotFoundError:
-            await ctx.send(f"❌ **Step 1/2 Failed (Path):** Directory not found: `{REPO_PATH_INSIDE_CONTAINER}`. Check your Red Bot volume mounts.")
-            return
-        except Exception as e:
-            await ctx.send(f"❌ **Step 1/2 Failed (Unknown Error):** {e}")
-            return
-
-        # --- 2. Trigger Cog Update/Reload ---
-        await status_message.edit(content="🔄 **Step 2/2: Triggering Red Bot cog reload...**")
+        await status_message.edit(content="🔄 **Triggering Red Bot cog update/reload...**")
 
         self.downloader_cog = self.bot.get_cog("Downloader")
 
         if self.downloader_cog and hasattr(self.downloader_cog, 'cogupdate'):
             try:
-                # Invoke the built-in cogupdate command programmatically
-                # This reloads the cogs using the new files pulled in Step 1
+                # Invoke the built-in cogupdate command programmatically.
+                # Red's downloader will check the public GitHub URL for updates.
                 await ctx.invoke(self.downloader_cog.cogupdate)
-                # The cogupdate command itself sends final output, so we update the status
-                await status_message.edit(content="🎉 **Automation Complete:** Files pulled and cogs reloaded!")
+                
+                # We expect cogupdate to send its own output, so we delete the status message 
+                # to avoid clutter if successful, or leave it for diagnostic context if an error occurs.
+                await status_message.delete()
             except Exception as e:
-                await ctx.send(f"❌ **Step 2/2 Failed (Cog Reload):** Could not execute `cogupdate`. Error: {e}")
+                await ctx.send(f"❌ **Automation Failed (Cog Reload):** Could not execute `cogupdate`. Error: {e}")
         else:
-            await ctx.send("❌ **Step 2/2 Failed (Dependency):** The `Downloader` cog must be loaded for this command to work.")
+            await ctx.send("❌ **Automation Failed (Dependency):** The `Downloader` cog must be loaded for this command to work.")
 
-    async def _is_git_available(self):
-        """Check if the git command is executable."""
-        try:
-            process = await asyncio.create_subprocess_shell(
-                "which git",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            await process.wait()
-            return process.returncode == 0
-        except FileNotFoundError:
-            return False
 
 async def setup(bot):
     await bot.add_cog(Afterwork(bot))
