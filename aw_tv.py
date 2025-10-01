@@ -17,7 +17,7 @@ class AfterWorkTV(commands.Cog, name="AfterWorkTV"):
             enabled=True
         )
 
-    @commands.group(name="tv")
+    @commands.group(name="awtv")
     @checks.admin_or_permissions(manage_guild=True)
     async def tv_settings(self, ctx: commands.Context):
         """
@@ -125,12 +125,3 @@ class AfterWorkTV(commands.Cog, name="AfterWorkTV"):
 async def setup(bot):
     aw_tv_cog = AfterWorkTV(bot)
     await bot.add_cog(aw_tv_cog)
-
-    await bot.wait_until_ready()
-    
-    primary_cog = bot.get_cog("AfterWorkBase")
-    if primary_cog:
-        base_command = primary_cog.afterworktest_base
-        base_command.add_command(aw_tv_cog.tv_settings)
-    else:
-        log.error("Could not find the AfterWorkBase cog to attach commands.")
