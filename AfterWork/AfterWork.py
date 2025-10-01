@@ -4,7 +4,7 @@ import logging
 
 log = logging.getLogger("red.afterwork.base")
 
-class AfterWorkBase(commands.Cog, name="AfterWorkBase"):
+class AfterWork(commands.Cog):
 	"""
 	The base cog for Afterwork test commands.
 	This cog owns the `afterworktest` command and provides a custom help menu.
