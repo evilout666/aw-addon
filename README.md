@@ -1,13 +1,17 @@
-# Redbot Cogs by evilout666
+# AWCogs (Flattened Development Repo)
+THIS REPO IS NOT FOR PUBLIC USE. DEVELOPMENT / TESTING ONLY.
 
-This repository contains a collection of cogs for Redbot. Each cog is in its own folder with an info.json file and documentation.
+All cog files have been flattened into single Python modules at the repository root for manual deployment.
 
-## Cogs
-- afterwork
-- aw_embed
-- aw_permissions
-- aw_private
-- aw_tv
-- aw_voice
+Available modules:
+- afterwork.py (optional manager panel)
+- aw_embed.py
+- aw_tv.py
+- aw_voice.py
 
-See each folder for details and installation instructions.
+Notes:
+- Metadata (info.json) and package folders were removed intentionally.
+- Manual loading only: use `[p]load aw_embed`, `[p]load aw_tv`, etc., after placing files in your bot cogs path.
+- The manager panel expects these filenames and may not function outside this layout.
+
+Use at your own risk.
