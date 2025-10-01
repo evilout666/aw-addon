@@ -121,3 +121,4 @@ async def setup(bot):
         base_command.add_command(aw_vc_cog.vc_settings)
     else:
         log.error("Could not find the AfterWorkBase cog to attach commands.")
+// ...existing code...

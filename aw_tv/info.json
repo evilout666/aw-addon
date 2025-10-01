@@ -1,0 +1,10 @@
+{
+  "author": ["evilout666"],
+  "description": "Aw TV cog for Redbot.",
+  "install_msg": "[p]cog install aw_tv - Aw TV cog installed!",
+  "short": "Aw TV cog.",
+  "end_user_data_statement": "No end user data is stored.",
+  "min_bot_version": "3.5.0",
+  "min_python_version": [3, 8, 0],
+  "tags": ["tv", "utility"]
+}
