@@ -78,10 +78,20 @@ class CogManagerView(discord.ui.View):
                 msg = f"Successfully reloaded `{cog_name}`."
                 self.cog_states[cog_name]['loaded'] = True
             elif action == "install":
-                await self.bot.get_cog("Downloader").install(cog_name)
+                downloader = self.bot.get_cog("Downloader")
+                repo = await downloader.get_repo("AWCogs")
+                if not repo:
+                    await interaction.response.send_message("AWCogs repo not found by Downloader.", ephemeral=True)
+                    return
+                await downloader.install(repo, [cog_name])
                 msg = f"Successfully installed `{cog_name}`."
             elif action == "uninstall":
-                await self.bot.get_cog("Downloader").uninstall(cog_name)
+                downloader = self.bot.get_cog("Downloader")
+                repo = await downloader.get_repo("AWCogs")
+                if not repo:
+                    await interaction.response.send_message("AWCogs repo not found by Downloader.", ephemeral=True)
+                    return
+                await downloader.uninstall(repo, [cog_name])
                 msg = f"Successfully uninstalled `{cog_name}`."
             
             await interaction.response.send_message(msg, ephemeral=True)
