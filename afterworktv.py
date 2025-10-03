@@ -150,13 +150,16 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
                 self.bot.add_view(SetupView(self, initial_enabled=initial_enabled), message_id=data['setup_message_id'])
 
     async def _debounce_sonarr_post(self, guild_id: int, series_title: str, season_num: int, original_embed: discord.Embed):
-        settings = await self.config.guild_from_id(guild_id).all()
-        delay = settings.get('grouping_delay', 300)
+        # NOTE FOR TESTING: This value is temporarily set to 1 second.
+        # For production, it should be reverted to settings.get('grouping_delay', 300).
+        delay = 1 
         await asyncio.sleep(delay)
-        dest_id = settings.get('dest_channel')
+
+        dest_id = await self.config.guild_from_id(guild_id).dest_channel()
         if not dest_id: return
         dest_channel = self.bot.get_channel(dest_id)
         if not dest_channel: return
+
         new_embed = discord.Embed(title=f"{series_title} - Season {season_num}",description=f"Season {season_num} of **{series_title}** has been added to the library.",color=original_embed.color)
         if original_embed.thumbnail: new_embed.set_thumbnail(url=original_embed.thumbnail.url)
         try:
@@ -206,12 +209,10 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
         grouping_enabled = data.get('group_season_grabs', True)
 
         for emb in message.embeds:
-            # --- IMPROVED REGEX LOGIC ---
             # This pattern handles both "S01E01" and "19x01" formats.
             match = re.match(r"^(.*?) - (?:S)?(\d+)[xE](\d+)", emb.title or "")
 
             if match and grouping_enabled:
-                # It's a TV show, and grouping is on. Apply debounce logic.
                 series_title = match.group(1).strip()
                 season_num = int(match.group(2))
                 buffer_key = (message.guild.id, series_title, season_num)
@@ -222,7 +223,6 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
                 task = asyncio.create_task(self._debounce_sonarr_post(message.guild.id, series_title, season_num, emb))
                 self.grab_buffer[buffer_key] = task
             else:
-                # It's a Movie, a non-standard message, or grouping is disabled. Post it immediately.
                 log.info("Processing as a direct post (Movie, non-standard, or grouping disabled).")
                 new_embed=discord.Embed(title=emb.title,description=emb.description,color=emb.color)
                 if emb.thumbnail:new_embed.set_thumbnail(url=emb.thumbnail.url)
