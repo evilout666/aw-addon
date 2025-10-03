@@ -32,7 +32,6 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     is_enabled = settings.get('enabled', False)
 
     dest_channel = cog.bot.get_channel(dest_id)
-    # We can't reliably get a user object for a webhook, so we just display the ID
     webhook_user_display = f"`{user_id}`" if user_id else "*Not configured*"
     
     status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
@@ -42,7 +41,7 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     embed.clear_fields()
     
     embed.add_field(name="System Status", value=status_emoji, inline=True)
-    embed.add_field(name="Webhook User ID", value=webhook_user_display, inline=False)
+    embed.add_field(name="Integration ID", value=webhook_user_display, inline=False)
     embed.add_field(name="Destination Channel", value=dest_name, inline=False)
     
     return embed
@@ -64,11 +63,11 @@ class TargetChannelModal(discord.ui.Modal, title="Set Target Channel"):
         await _update_setup_embed(self.cog,interaction.guild,embed)
         await interaction.response.edit_message(embed=embed)
 
-class UserIDModal(discord.ui.Modal, title="Set Webhook User ID"):
+class UserIDModal(discord.ui.Modal, title="Set Integration ID"):
     user_id_input = discord.ui.TextInput(
-        label="Webhook User/Bot ID",
+        label="Integration ID",
         style=discord.TextStyle.short,
-        placeholder="Paste the ID of the user that posts webhooks.",
+        placeholder="Paste the ID of the integration that posts webhooks.",
         required=True,
         max_length=20,
     )
@@ -85,7 +84,7 @@ class UserIDModal(discord.ui.Modal, title="Set Webhook User ID"):
         
         await self.cog.config.guild(interaction.guild).webhook_user_id.set(user_id)
         embed = self.original_message.embeds[0]
-        embed.set_footer(text=f"User ID updated by {interaction.user.display_name}")
+        embed.set_footer(text=f"Integration ID updated by {interaction.user.display_name}")
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.response.edit_message(embed=embed)
 
@@ -100,17 +99,17 @@ class SetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    @discord.ui.button(label="Set Target", style=discord.ButtonStyle.primary, custom_id="tv_set_target_button", row=0)
+    @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="tv_set_target_button", row=0)
     async def set_target_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         await interaction.response.send_modal(TargetChannelModal(self.cog, interaction.message))
 
-    @discord.ui.button(label="Set User ID", style=discord.ButtonStyle.primary, custom_id="tv_set_user_id_button", row=0)
+    @discord.ui.button(label="Integration ID", style=discord.ButtonStyle.primary, custom_id="tv_set_user_id_button", row=0)
     async def set_user_id_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         await interaction.response.send_modal(UserIDModal(self.cog, interaction.message))
 
-    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="tv_toggle_button", row=1)
+    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="tv_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         new_state = not (await self.cog.config.guild(interaction.guild).enabled())
@@ -126,7 +125,7 @@ class SetupView(discord.ui.View):
 
 class AfterworkTV(commands.Cog, name="AfterworkTV"):
     """
-    Reformats and reposts Sonarr/Radarr webhook embeds, with intelligent season grouping.
+    Reformats and reposts Sonarr/Radarr webhook embeds.
     """
     
     def __init__(self, bot):
@@ -136,11 +135,8 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
             enabled=False,
             dest_channel=None,
             webhook_user_id=None,
-            setup_message_id=None,
-            group_season_grabs=True,
-            grouping_delay=300
+            setup_message_id=None
         )
-        self.grab_buffer = {}
 
     async def initialize(self):
         guilds_data = await self.config.all_guilds()
@@ -148,25 +144,6 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
             if data.get('setup_message_id'):
                 initial_enabled = data.get('enabled', False)
                 self.bot.add_view(SetupView(self, initial_enabled=initial_enabled), message_id=data['setup_message_id'])
-
-    async def _debounce_sonarr_post(self, guild_id: int, series_title: str, season_num: int, original_embed: discord.Embed):
-        # NOTE FOR TESTING: This value is temporarily set to 1 second.
-        # For production, it should be reverted to settings.get('grouping_delay', 300).
-        delay = 1 
-        await asyncio.sleep(delay)
-
-        dest_id = await self.config.guild_from_id(guild_id).dest_channel()
-        if not dest_id: return
-        dest_channel = self.bot.get_channel(dest_id)
-        if not dest_channel: return
-
-        new_embed = discord.Embed(title=f"{series_title} - Season {season_num}",description=f"Season {season_num} of **{series_title}** has been added to the library.",color=original_embed.color)
-        if original_embed.thumbnail: new_embed.set_thumbnail(url=original_embed.thumbnail.url)
-        try:
-            await dest_channel.send(embed=new_embed)
-        except discord.Forbidden: pass 
-        finally:
-            self.grab_buffer.pop((guild_id, series_title, season_num), None)
 
     @commands.command(name="afterworktv")
     @commands.is_owner()
@@ -182,7 +159,7 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
                 old_message = await ctx.channel.fetch_message(old_message_id)
                 await old_message.delete()
             except discord.HTTPException: pass
-        initial_embed = discord.Embed(title="🎬 Sonarr & Radarr Configuration", color=discord.Color.blue())
+        initial_embed = discord.Embed(title="Radarr/Sonarr", color=discord.Color.blue())
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
         initial_enabled = await self.config.guild(ctx.guild).enabled()
         view = SetupView(self, initial_enabled=initial_enabled)
@@ -205,32 +182,63 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
         webhook_user_id = data.get('webhook_user_id')
         if not data.get('enabled') or not webhook_user_id or message.author.id != webhook_user_id:
             return
-            
-        grouping_enabled = data.get('group_season_grabs', True)
 
         for emb in message.embeds:
-            # This pattern handles both "S01E01" and "19x01" formats.
-            match = re.match(r"^(.*?) - (?:S)?(\d+)[xE](\d+)", emb.title or "")
+            new_embed = None
+            # Flexible regex to capture series name, S/E numbers, and episode title
+            match = re.match(r"^(.*?) - (?:S)?(\d+)[xE](\d+) - (.*)$", emb.title or "")
 
-            if match and grouping_enabled:
-                series_title = match.group(1).strip()
+            if match:
+                # It's a TV show, format it as requested
+                series_name = match.group(1).strip()
                 season_num = int(match.group(2))
-                buffer_key = (message.guild.id, series_title, season_num)
-                if buffer_key in self.grab_buffer:
-                    log.info(f"Suppressing duplicate Sonarr grab for {series_title} S{season_num}.")
-                    continue
-                log.info(f"Starting debounce for {series_title} S{season_num}.")
-                task = asyncio.create_task(self._debounce_sonarr_post(message.guild.id, series_title, season_num, emb))
-                self.grab_buffer[buffer_key] = task
+                episode_num = int(match.group(3))
+                episode_title = match.group(4).strip()
+
+                new_embed = discord.Embed(
+                    title=series_name,
+                    description=f"Season {season_num} Episode {episode_num:02d}",
+                    color=emb.color
+                )
+                if emb.thumbnail:
+                    new_embed.set_thumbnail(url=emb.thumbnail.url)
+                
+                overview_value = None
+                if emb.fields:
+                    for field in emb.fields:
+                        if field.name.lower() == 'overview':
+                            overview_value = field.value
+                            break
+                
+                if overview_value:
+                    new_embed.add_field(name=episode_title, value=overview_value, inline=False)
             else:
-                log.info("Processing as a direct post (Movie, non-standard, or grouping disabled).")
-                new_embed=discord.Embed(title=emb.title,description=emb.description,color=emb.color)
-                if emb.thumbnail:new_embed.set_thumbnail(url=emb.thumbnail.url)
-                dest_channel=self.bot.get_channel(data.get('dest_channel'))
+                # It's a Movie or other notification. Repost with the Overview as the description.
+                new_embed = discord.Embed(
+                    title=emb.title,
+                    color=emb.color
+                )
+                if emb.thumbnail:
+                    new_embed.set_thumbnail(url=emb.thumbnail.url)
+
+                overview_value = None
+                if emb.fields:
+                    for field in emb.fields:
+                        if field.name.lower() == 'overview':
+                            overview_value = field.value
+                            break
+                
+                new_embed.description = overview_value or emb.description
+
+            # Add the footer and send the created embed
+            if new_embed:
+                new_embed.set_footer(text="New On Jellyfin")
+                dest_channel = self.bot.get_channel(data.get('dest_channel'))
                 if dest_channel:
                     try:
                         sent_msg = await dest_channel.send(embed=new_embed)
-                        log.info(f"Reposted webhook. ID: {sent_msg.id}")
+                        # Keep this one log for successful operations
+                        log.info(f"Successfully reposted webhook embed to #{dest_channel.name} (ID: {sent_msg.id})")
                     except discord.Forbidden: 
                         await _send_owner_dm(self.bot, f"Failed to post embed in {dest_channel.mention} due to permissions.")
 
