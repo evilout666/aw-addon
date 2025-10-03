@@ -2,13 +2,13 @@ import discord
 from redbot.core import commands, Config
 import logging
 import asyncio
+import re
 from datetime import datetime
 
-log = logging.getLogger("red.AfterworkHD") # Renamed
+log = logging.getLogger("red.AfterworkHD") 
 
 # --- UTILITY FUNCTIONS ---
 
-# Added utility to generate branded footer (from afterworktv/vc)
 def _get_admin_footer(interaction: discord.Interaction, status_action: str) -> str:
     """Helper to generate the administrative footer format."""
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -21,7 +21,7 @@ async def _send_owner_dm(bot, message: str):
     if owner:
         try:
             embed = discord.Embed(
-                title="⚠️ Afterwork HD Error Notification", # Renamed
+                title="⚠️ Afterwork HD Error Notification",
                 description=message,
                 color=discord.Color.red()
             )
@@ -76,10 +76,15 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     """Refreshes the configuration data shown in the setup embed."""
     settings = await cog.config.guild(guild).all()
     category_id = settings.get('managed_category_id')
-    is_enabled = settings.get('enabled', False)
     
-    status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
-    
+    # DETERMINE VISIBILITY STATUS (NEW LOGIC)
+    is_hidden = await cog._is_managed_category_hidden(guild) 
+
+    if is_hidden:
+        status_display = "🔴 Hidden"
+    else:
+        status_display = "🟢 Visible"
+
     # Category Status
     category_channel = guild.get_channel(category_id)
     category_display = f"**{category_channel.name}** (`{category_id}`)" if category_channel else "*Not configured*"
@@ -91,7 +96,8 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
         channel_list_str = "\n".join(channels) if channels else "*Empty Category*"
 
     embed.clear_fields()
-    embed.add_field(name="System Status", value=status_emoji, inline=False)
+    # CHANGE APPLIED: Renamed field and used new visibility status
+    embed.add_field(name="Visibility Status", value=status_display, inline=False)
     embed.add_field(name="Managed Category", value=category_display, inline=False)
     embed.add_field(name="Channels in Category", value=channel_list_str, inline=False)
     
@@ -127,24 +133,26 @@ class CategoryIDModal(discord.ui.Modal, title="Set Managed Category ID"):
         # Added administrative footer
         embed.set_footer(text=_get_admin_footer(interaction, "Category updated"))
         await _update_setup_embed(self.cog, interaction.guild, embed)
-        await self.original_message.edit(embed=embed)
+        
+        # Refresh the view to potentially update the dynamic button color
+        initial_hidden = await self.cog._is_managed_category_hidden(interaction.guild)
+        view = SetupView(self.cog, initial_hidden=initial_hidden) 
+        await self.original_message.edit(embed=embed, view=view)
 
 
 # --- VIEW (The Persistent Setup Hub) ---
 
 class SetupView(discord.ui.View):
-    def __init__(self, cog: commands.Cog, initial_enabled: bool = False, initial_hidden: bool = False):
+    # REMOVED: initial_enabled parameter
+    def __init__(self, cog: commands.Cog, initial_hidden: bool = False):
         super().__init__(timeout=None)
         self.cog = cog
         
-        # Dynamic Enable/Disable Button Logic
-        self.toggle_system.label = "Disable" if initial_enabled else "Enable"
-        self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
-
-        # Dynamic Hide/Show Button Logic (Simplified Labels)
+        # CHANGE APPLIED: Dynamic Hide/Show Button Logic based on initial_hidden state
+        # If currently hidden (True), button should be GREEN "Show" (SUCCESS)
+        # If currently visible (False), button should be RED "Hide" (DANGER)
         self.toggle_visibility_action.label = "Show" if initial_hidden else "Hide"
-        # Changed to secondary button style
-        self.toggle_visibility_action.style = discord.ButtonStyle.secondary
+        self.toggle_visibility_action.style = discord.ButtonStyle.success if initial_hidden else discord.ButtonStyle.danger
 
 
     @discord.ui.button(label="Category ID", style=discord.ButtonStyle.primary, custom_id="hide_set_category_button", row=0)
@@ -154,7 +162,7 @@ class SetupView(discord.ui.View):
             return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
         await interaction.response.send_modal(CategoryIDModal(self.cog, interaction.message))
 
-    @discord.ui.button(label="Hide / Show", style=discord.ButtonStyle.primary, custom_id="hide_show_button", row=0)
+    @discord.ui.button(label="Hide / Show", style=discord.ButtonStyle.secondary, custom_id="hide_show_button", row=0)
     async def toggle_visibility_action(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): 
             # ERROR: Send publicly
@@ -181,68 +189,38 @@ class SetupView(discord.ui.View):
             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
                 role, overwrite=None, reason=reason
             )
+            # DYNAMIC COLOR CHANGE: Next state will be visible (GREEN)
             new_button_label = "Hide"
+            new_button_style = discord.ButtonStyle.danger
         else: 
             # Action: HIDE (Apply Admin Denial)
             action_verb = "hidden"
             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
                 role, view_channel=False, reason=reason
             )
+            # DYNAMIC COLOR CHANGE: Next state will be hidden (RED)
             new_button_label = "Show"
+            new_button_style = discord.ButtonStyle.success
         
         # Apply permissions across all channels in the managed category
         await _apply_perms_to_category(self.cog, interaction.guild, perm_action)
         
         # Update button properties to reflect the NEW state
         button.label = new_button_label
-        button.style = discord.ButtonStyle.secondary # Fixed style
+        button.style = new_button_style
         
         embed = interaction.message.embeds[0]
         # Added administrative footer
         status_msg = f"Channels were {action_verb}"
         embed.set_footer(text=_get_admin_footer(interaction, status_msg))
+        
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed, view=self)
         
         # SUCCESS: Send ephemeral (private)
         await interaction.followup.send(f"Managed channels have been **{action_verb}** for admins.", ephemeral=True)
-
-
-    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="hide_toggle_button", row=0)
-    async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self.cog.bot.is_owner(interaction.user): 
-            # ERROR: Send publicly
-            return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
-        
-        await interaction.response.defer(ephemeral=True, thinking=True) # Defer ephemeral to update quickly
-        new_state = not (await self.cog.config.guild(interaction.guild).enabled())
-        await self.cog.config.guild(interaction.guild).enabled.set(new_state)
-        
-        perm_action = None
-        
-        if new_state: # Enabling/Hiding (Deny for Admins)
-             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
-                role, view_channel=False, reason=reason
-            )
-        else: # Disabling/Showing (Revert Admin Denial)
-            perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
-                role, overwrite=None, reason=reason
-            )
-
-        await _apply_perms_to_category(self.cog, interaction.guild, perm_action)
-        
-        button.label = "Disable" if new_state else "Enable"
-        button.style = discord.ButtonStyle.danger if new_state else discord.ButtonStyle.success
-        
-        embed = interaction.message.embeds[0]
-        # Added administrative footer
-        status_msg = f"System {'enabled' if new_state else 'disabled'}"
-        embed.set_footer(text=_get_admin_footer(interaction, status_msg))
-        await _update_setup_embed(self.cog, interaction.guild, embed)
-        await interaction.message.edit(embed=embed, view=self)
-        
-        # SUCCESS: Send ephemeral (private)
-        await interaction.followup.send(f"System has been **{'enabled' if new_state else 'disabled'}** and permissions were updated.", ephemeral=True)
+    
+    # REMOVED: toggle_system method
 
 # --- MAIN COG CLASS ---
 
@@ -251,7 +229,7 @@ class AfterworkHD(commands.Cog, name="AfterworkHD"): # Renamed
         self.bot = bot
         self.config = Config.get_conf(self, identifier=246813579, force_registration=True)
         self.config.register_guild(
-            enabled=False,
+            # REMOVED: enabled=False
             managed_category_id=None,
             setup_message_id=None
         )
@@ -260,15 +238,11 @@ class AfterworkHD(commands.Cog, name="AfterworkHD"): # Renamed
         guilds_data = await self.config.all_guilds()
         for guild_id, data in guilds_data.items():
             if data.get('setup_message_id'):
-                # We need to determine the initial hidden state to correctly initialize the button colors
                 guild = self.bot.get_guild(guild_id)
-                if guild:
-                    initial_hidden = await self._is_managed_category_hidden(guild)
-                else:
-                    initial_hidden = False
+                # Removed initial_enabled logic
+                initial_hidden = await self._is_managed_category_hidden(guild) if guild else False
 
                 self.bot.add_view(SetupView(self, 
-                                            initial_enabled=data.get('enabled', False), 
                                             initial_hidden=initial_hidden), 
                                   message_id=data['setup_message_id'])
     
@@ -304,7 +278,6 @@ class AfterworkHD(commands.Cog, name="AfterworkHD"): # Renamed
             except discord.HTTPException: pass
 
         # Determine initial state for the view
-        initial_enabled = await self.config.guild(ctx.guild).enabled()
         initial_hidden = await self._is_managed_category_hidden(ctx.guild)
 
         # Shortened description (removed "all" and "Channels are")
@@ -315,7 +288,8 @@ class AfterworkHD(commands.Cog, name="AfterworkHD"): # Renamed
         initial_embed = discord.Embed(title="Hidden Channel", description=description, color=discord.Color.blue())
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
         
-        view = SetupView(self, initial_enabled=initial_enabled, initial_hidden=initial_hidden)
+        # Removed initial_enabled from SetupView call
+        view = SetupView(self, initial_hidden=initial_hidden) 
         sent_message = await ctx.send(embed=initial_embed, view=view)
         
         await sent_message.pin(reason="Afterwork Hide Configuration Hub.")
@@ -331,5 +305,6 @@ class AfterworkHD(commands.Cog, name="AfterworkHD"): # Renamed
         except Exception: pass
 
 async def setup(bot):
-    cog = AfterworkHD(bot) # Renamed
+    cog = AfterworkHD(bot)
+    await cog.initialize()
     await bot.add_cog(cog)
