@@ -41,7 +41,6 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     """Refreshes the configuration data shown in the setup embed."""
     settings = await cog.config.guild(guild).all()
     channel_id = settings.get('target_channel_id') 
-    json_preview = settings.get('json_payload', '*Not configured*')
     is_enabled = settings.get('enabled', False)
 
     status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
@@ -58,12 +57,12 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     embed.add_field(name="System Status", value=status_emoji, inline=False)
     embed.add_field(name="Target Channel", value=channel_display, inline=False)
     
-    # Truncate JSON for display
-    preview_value = json_preview.replace('\n', ' ')
-    if len(preview_value) > 50:
-        preview_value = preview_value[:47] + "..."
-        
-    embed.add_field(name="JSON Payload Preview", value=f"`{preview_value}`", inline=False)
+    # CHANGE APPLIED HERE: Display external editor info instead of local preview
+    embed.add_field(
+        name="JSON Payload Source", 
+        value="Use an Online Editor (e.g., [afterwork.evilout666.com](https://afterwork.evilout666.com)) to generate the message JSON.", 
+        inline=False
+    )
     
     return embed
 
@@ -180,14 +179,14 @@ class SetupView(discord.ui.View):
         self.cog = cog
         
         # Standardized Toggle Button Logic
-        # The toggle system button will be added in the callback
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
     def _check_owner(self, interaction: discord.Interaction):
         """Standardized owner check function."""
         if interaction.user.id != self.cog.bot.owner_id: 
-            asyncio.create_task(interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=False))
+            # FIX APPLIED HERE: Send ephemeral response for permission error
+            asyncio.create_task(interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=True))
             return False
         return True
 
@@ -198,7 +197,8 @@ class SetupView(discord.ui.View):
         modal = ChannelIDModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Send Msg", style=discord.ButtonStyle.success, custom_id="mb_send_message_button", row=0)
+    # CHANGE APPLIED HERE: Color changed to Blurple (a non-standard color) and row is 0
+    @discord.ui.button(label="Send Msg", style=discord.ButtonStyle.blurple, custom_id="mb_send_message_button", row=0)
     async def send_message_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Launches the modal to configure and send the JSON embed."""
         if not self._check_owner(interaction): return
@@ -210,8 +210,8 @@ class SetupView(discord.ui.View):
         
         await interaction.response.send_modal(modal)
 
-    # Button 3: Toggle Status (moved to row 1 and renamed for clarity)
-    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="template_toggle_button", row=1)
+    # CHANGE APPLIED HERE: Moved to row 0
+    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="template_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self._check_owner(interaction): return
         
@@ -231,6 +231,12 @@ class SetupView(discord.ui.View):
         await interaction.message.edit(embed=embed, view=self)
         
         await interaction.followup.send(f"System has been **{'enabled' if new_state else 'disabled'}**.", ephemeral=True)
+
+    # Removed the placeholder button that was on row 1
+    # @discord.ui.button(label="Setting 3 (Secondary)", style=discord.ButtonStyle.secondary, custom_id="template_set_3_button", row=1, disabled=True)
+    # async def setting_button_3(self, interaction: discord.Interaction, button: discord.ui.Button):
+    #     if not self._check_owner(interaction): return
+    #     await interaction.response.send_message("This button is a placeholder for Setting 3.", ephemeral=True)
 
 # --- MAIN COG CLASS ---
 
@@ -273,7 +279,6 @@ class AfterworkMB(commands.Cog, name="AfterworkMB"):
                 await old_message.delete()
             except discord.HTTPException: pass
 
-        # Title change applied here
         initial_embed = discord.Embed(title="Send embed message", color=discord.Color.blue())
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
         
