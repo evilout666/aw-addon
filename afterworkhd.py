@@ -240,7 +240,7 @@ class AfterworkHD(commands.Cog, name="AfterworkHD"):
                                             initial_hidden=initial_hidden), 
                                   message_id=data['setup_message_id'])
     
-    # FIX APPLIED: Rewritten function to check all role overwrites for explicit denial on the Administrator permission
+    # FIX APPLIED: Rewritten to check for an explicit View Channel Deny on the Administrator role.
     async def _is_managed_category_hidden(self, guild: discord.Guild) -> bool:
         """
         Checks if the channel is hidden by looking for an explicit 'View Channel: Deny' 
@@ -261,19 +261,18 @@ class AfterworkHD(commands.Cog, name="AfterworkHD"):
             if isinstance(target, discord.Role):
                 
                 # Check if the role has the base Administrator permission.
-                # If a role has this permission, it is considered an admin-level role for the cog's purpose.
                 if target.permissions.administrator:
                     
                     # Check if the overwrite explicitly denies view_channel.
                     if overwrite.view_channel is False:
-                        # If we find an Administrator role that is explicitly denied, the channel is hidden.
+                        # If an Administrator role is explicitly denied, the channel is Hidden.
                         return True
+                    else:
+                        # If an Administrator role is found, and view_channel is NOT denied, 
+                        # it means the channel is Visible to admins (the Hide action was never applied or was reverted).
+                        return False
                     
-                    # If an Administrator role is found, but view_channel is NOT denied, the channel is Visible.
-                    # We can stop searching here for this cog's specific logic.
-                    return False
-                    
-        return False
+        return False # If no Administrator role is found with an overwrite, default to Visible.
 
     @commands.command(name="afterworkhd") 
     @commands.is_owner()
