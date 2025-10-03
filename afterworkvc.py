@@ -42,7 +42,7 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     
     embed.clear_fields()
     
-    # Field 1: System Status (Restored)
+    # Field 1: System Status
     embed.add_field(name="System Status", value=status_emoji, inline=True)
     
     # Field 2: Source VC Target
@@ -102,8 +102,6 @@ class ChannelIDModal(discord.ui.Modal, title="Set Source Voice Channel"):
         # Edit message to update the embed and dynamically update the button state
         view = SetupView(self.cog, initial_enabled=True)
         await interaction.response.edit_message(embed=embed, view=view)
-        
-        # NO explicit success message is sent to the channel or ephemerally.
 
 # --- VIEW (The Persistent Setup Hub) ---
 
@@ -115,11 +113,12 @@ class SetupView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
         
-        # Dynamically set the initial state of the toggle button
+        # Dynamically set the initial state of the toggle button (Activation Button)
         self.toggle_system.label = "Deactivate System" if initial_enabled else "Activate System"
-        self.toggle_system.style = discord.ButtonStyle.success if initial_enabled else discord.ButtonStyle.secondary
+        # Green for Activate/Success, Red for Deactivate/Danger
+        self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    @discord.ui.button(label="Set/Override Channel ID", style=discord.ButtonStyle.primary, custom_id="vc_set_button")
+    @discord.ui.button(label="Set/Override Channel ID", style=discord.ButtonStyle.primary, custom_id="vc_set_button", row=0)
     async def set_source_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Button callback that sends the ChannelIDModal to the user."""
         if not await self.cog.bot.is_owner(interaction.user):
@@ -128,7 +127,7 @@ class SetupView(discord.ui.View):
         modal = ChannelIDModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Toggle System State", style=discord.ButtonStyle.secondary, custom_id="vc_toggle_button", row=1)
+    @discord.ui.button(label="Toggle System State", style=discord.ButtonStyle.secondary, custom_id="vc_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Toggles the 'enabled' state of the listener."""
         if not await self.cog.bot.is_owner(interaction.user):
@@ -139,7 +138,8 @@ class SetupView(discord.ui.View):
         
         # Update button appearance and label
         button.label = "Deactivate System" if new_state else "Activate System"
-        button.style = discord.ButtonStyle.success if new_state else discord.ButtonStyle.secondary
+        # Green for Activate/Success, Red for Deactivate/Danger
+        button.style = discord.ButtonStyle.danger if new_state else discord.ButtonStyle.success
 
         # Update the embed status field
         embed = interaction.message.embeds[0]
@@ -150,7 +150,7 @@ class SetupView(discord.ui.View):
 
 
 # --- VOICE CHANNEL CONTROLS (Room Owner View) ---
-# NOTE: VoiceChannelButtons class remains unchanged.
+# NOTE: VoiceChannelButtons class remains unchanged from the previous version.
 
 class VoiceChannelButtons(discord.ui.View):
     """
@@ -321,7 +321,6 @@ class AfterWorkVC(commands.Cog, name="AfterWorkVC"):
 
     async def initialize(self):
         """Asynchronous initialization method."""
-        # This is where we would typically re-add the view persistence hook
         guilds_data = await self.config.all_guilds()
         for guild_id, data in guilds_data.items():
             if data.get('setup_message_id'):
@@ -350,7 +349,7 @@ class AfterWorkVC(commands.Cog, name="AfterWorkVC"):
                 f"Configuration failed in **{ctx.guild.name}** (`{ctx.guild.id}`). "
                 f"I need **Send Messages** and **Manage Messages** permissions in channel **#{ctx.channel.name}** to post and pin the hub."
             )
-            return await ctx.send("❌ **Error:** Missing permissions. Check bot owner DMs for details.", delete_after=15)
+            return # Exit silently if permissions are missing (error handled via DM)
         
         # --- 1. Cleanup Old Hub ---
         settings = await self.config.guild(ctx.guild).all()
@@ -393,13 +392,13 @@ class AfterWorkVC(commands.Cog, name="AfterWorkVC"):
         try:
             # Fetch the channel history for the latest system message (the pin notification)
             async for message in ctx.channel.history(limit=5):
+                # The pin system message has type PINS_ADD, and the author is the bot itself (for its own pin)
                 if message.type == discord.MessageType.pins_add and message.author.id == self.bot.user.id:
                     await message.delete()
                     break
-        except discord.Forbidden:
-            log.warning("Failed to delete pin confirmation system message. Missing Manage Messages permission?")
-        except Exception as e:
-            log.error(f"Error deleting pin confirmation message: {e}")
+        except Exception:
+            # We already checked manage_messages, so any failure here is logged but ignored for core functionality
+            pass
 
 
     # --- LISTENERS (Core Functionality) ---
@@ -409,6 +408,7 @@ class AfterWorkVC(commands.Cog, name="AfterWorkVC"):
         guild = member.guild
         config = await self.config.guild(guild).all()
 
+        # Check if the system is globally disabled
         if not config.get("enabled"):
             return
 
