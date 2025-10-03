@@ -144,7 +144,7 @@ class SetupView(discord.ui.View):
             # ERROR: Send publicly
             return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
         
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(ephemeral=True, thinking=True) # Defer ephemeral to update quickly
         
         settings = await self.cog.config.guild(interaction.guild).all()
         category_id = settings.get('managed_category_id')
@@ -185,7 +185,7 @@ class SetupView(discord.ui.View):
             # ERROR: Send publicly
             return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
         
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(ephemeral=True, thinking=True) # Defer ephemeral to update quickly
         new_state = not (await self.cog.config.guild(interaction.guild).enabled())
         await self.cog.config.guild(interaction.guild).enabled.set(new_state)
         
@@ -266,5 +266,4 @@ class AfterworkHide(commands.Cog, name="AfterworkHide"):
 
 async def setup(bot):
     cog = AfterworkHide(bot)
-    await cog.initialize()
     await bot.add_cog(cog)
