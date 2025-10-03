@@ -27,6 +27,7 @@ async def _get_admin_roles(guild: discord.Guild):
     """Gets a list of roles with admin-level permissions."""
     admin_roles = []
     for role in guild.roles:
+        # Check for Administrator or Manage Channels permission
         if role.permissions.administrator or role.permissions.manage_channels:
             admin_roles.append(role)
     return admin_roles
@@ -135,7 +136,7 @@ class SetupView(discord.ui.View):
     async def set_category_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): 
             # ERROR: Send publicly
-            return await interaction.response.send_message("Only owner can use this.", ephemeral=False) 
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
         await interaction.response.send_modal(CategoryIDModal(self.cog, interaction.message))
 
     @discord.ui.button(label="Hide / Show", style=discord.ButtonStyle.primary, custom_id="hide_show_button", row=0)
