@@ -186,7 +186,7 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
             except discord.HTTPException:
                 pass
 
-        initial_embed = discord.Embed(title="Webhook Formatter Hub", color=discord.Color.blue())
+        initial_embed = discord.Embed(title="🎬 Sonarr & Radarr Configuration", color=discord.Color.blue())
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
         
         initial_enabled = await self.config.guild(ctx.guild).enabled()
@@ -254,3 +254,4 @@ async def setup(bot):
     cog = AfterworkTV(bot)
     await cog.initialize()
     await bot.add_cog(cog)
+
