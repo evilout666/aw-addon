@@ -113,7 +113,7 @@ class SetupView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
         
-        self.toggle_system.label = "Deactivate System" if initial_enabled else "Activate System"
+        self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
     @discord.ui.button(label="Set Channels", style=discord.ButtonStyle.primary, custom_id="tv_set_channels_button", row=0)
@@ -131,7 +131,7 @@ class SetupView(discord.ui.View):
         new_state = not (await self.cog.config.guild(interaction.guild).enabled())
         await self.cog.config.guild(interaction.guild).enabled.set(new_state)
         
-        button.label = "Deactivate System" if new_state else "Activate System"
+        button.label = "Disable" if new_state else "Enable"
         button.style = discord.ButtonStyle.danger if new_state else discord.ButtonStyle.success
 
         embed = interaction.message.embeds[0]
@@ -254,4 +254,5 @@ async def setup(bot):
     cog = AfterworkTV(bot)
     await cog.initialize()
     await bot.add_cog(cog)
+
 
