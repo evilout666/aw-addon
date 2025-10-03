@@ -126,11 +126,18 @@ class CategoryIDModal(discord.ui.Modal, title="Set Managed Category ID"):
 # --- VIEW (The Persistent Setup Hub) ---
 
 class SetupView(discord.ui.View):
-    def __init__(self, cog: commands.Cog, initial_enabled: bool = False):
+    def __init__(self, cog: commands.Cog, initial_enabled: bool = False, initial_hidden: bool = False):
         super().__init__(timeout=None)
         self.cog = cog
+        
+        # Dynamic Enable/Disable Button Logic
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
+
+        # Dynamic Hide/Show Button Logic
+        self.toggle_visibility_action.label = "Show Channels" if initial_hidden else "Hide Channels"
+        self.toggle_visibility_action.style = discord.ButtonStyle.success if initial_hidden else discord.ButtonStyle.danger
+
 
     @discord.ui.button(label="Category ID", style=discord.ButtonStyle.primary, custom_id="hide_set_category_button", row=0)
     async def set_category_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -140,12 +147,12 @@ class SetupView(discord.ui.View):
         await interaction.response.send_modal(CategoryIDModal(self.cog, interaction.message))
 
     @discord.ui.button(label="Hide / Show", style=discord.ButtonStyle.primary, custom_id="hide_show_button", row=0)
-    async def hide_show_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def toggle_visibility_action(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): 
             # ERROR: Send publicly
             return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
         
-        await interaction.response.defer(ephemeral=True, thinking=True) # Defer ephemeral to update quickly
+        await interaction.response.defer(ephemeral=True, thinking=True)
         
         settings = await self.cog.config.guild(interaction.guild).all()
         category_id = settings.get('managed_category_id')
@@ -155,23 +162,36 @@ class SetupView(discord.ui.View):
             # ERROR: Send publicly
             return await interaction.followup.send("❌ **Error:** No category is configured or the category is empty.")
 
-        is_currently_enabled = settings.get('enabled')
+        # Determine current visibility state based on the first channel in the category
+        is_currently_hidden = await self.cog._is_managed_category_hidden(interaction.guild)
         
         perm_action = None
-        if is_currently_enabled: 
+        
+        if is_currently_hidden: 
+            # Action: SHOW (Revert Admin Denial)
             action_verb = "shown (unhidden)"
             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
                 role, overwrite=None, reason=reason
             )
+            new_button_label = "Hide Channels"
+            new_button_style = discord.ButtonStyle.danger
         else: 
+            # Action: HIDE (Apply Admin Denial)
             action_verb = "hidden"
             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
                 role, view_channel=False, reason=reason
             )
+            new_button_label = "Show Channels"
+            new_button_style = discord.ButtonStyle.success
         
+        # Apply permissions across all channels in the managed category
         await _apply_perms_to_category(self.cog, interaction.guild, perm_action)
         
-        embed = self.original_message.embeds[0]
+        # Update button properties to reflect the NEW state
+        button.label = new_button_label
+        button.style = new_button_style
+        
+        embed = interaction.message.embeds[0]
         embed.set_footer(text=f"Channels were {action_verb} by {interaction.user.display_name}")
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed, view=self)
@@ -230,7 +250,34 @@ class AfterworkHide(commands.Cog, name="AfterworkHide"):
         guilds_data = await self.config.all_guilds()
         for guild_id, data in guilds_data.items():
             if data.get('setup_message_id'):
-                self.bot.add_view(SetupView(self, initial_enabled=data.get('enabled', False)), message_id=data['setup_message_id'])
+                # We need to determine the initial hidden state to correctly initialize the button colors
+                guild = self.bot.get_guild(guild_id)
+                if guild:
+                    initial_hidden = await self._is_managed_category_hidden(guild)
+                else:
+                    initial_hidden = False
+
+                self.bot.add_view(SetupView(self, 
+                                            initial_enabled=data.get('enabled', False), 
+                                            initial_hidden=initial_hidden), 
+                                  message_id=data['setup_message_id'])
+    
+    async def _is_managed_category_hidden(self, guild: discord.Guild) -> bool:
+        """Checks the first channel in the managed category to see if it's currently hidden from admins."""
+        settings = await self.config.guild(guild).all()
+        category_id = settings.get('managed_category_id')
+        category = guild.get_channel(category_id)
+        
+        if not category or not isinstance(category, discord.CategoryChannel) or not category.channels:
+            return False # Cannot determine or not configured
+
+        # Check the highest bot role as a proxy for the administrative group
+        first_channel = category.channels[0]
+        admin_role = guild.me.top_role 
+        current_perms = first_channel.overwrites_for(admin_role)
+        
+        # If the View Channel permission is explicitly denied (False), the channel is hidden.
+        return current_perms.view_channel is False
 
     @commands.command(name="afterworkhide")
     @commands.is_owner()
@@ -246,11 +293,14 @@ class AfterworkHide(commands.Cog, name="AfterworkHide"):
                 await old_message.delete()
             except discord.HTTPException: pass
 
+        # Determine initial state for the view
+        initial_enabled = await self.config.guild(ctx.guild).enabled()
+        initial_hidden = await self._is_managed_category_hidden(ctx.guild)
+
         initial_embed = discord.Embed(title="Hidden Channel", color=discord.Color.dark_theme())
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
-        initial_enabled = await self.config.guild(ctx.guild).enabled()
         
-        view = SetupView(self, initial_enabled=initial_enabled)
+        view = SetupView(self, initial_enabled=initial_enabled, initial_hidden=initial_hidden)
         sent_message = await ctx.send(embed=initial_embed, view=view)
         
         await sent_message.pin(reason="Afterwork Hide Configuration Hub.")
@@ -267,4 +317,5 @@ class AfterworkHide(commands.Cog, name="AfterworkHide"):
 
 async def setup(bot):
     cog = AfterworkHide(bot)
+    await cog.initialize()
     await bot.add_cog(cog)
