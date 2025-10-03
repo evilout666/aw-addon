@@ -134,8 +134,9 @@ class SetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-        # Dynamic Hide/Show Button Logic
-        self.toggle_visibility_action.label = "Show Channels" if initial_hidden else "Hide Channels"
+        # Dynamic Hide/Show Button Logic (Simplified Labels)
+        self.toggle_visibility_action.label = "Show" if initial_hidden else "Hide"
+        # Color remains dynamic for visual feedback: Green to show, Red to hide
         self.toggle_visibility_action.style = discord.ButtonStyle.success if initial_hidden else discord.ButtonStyle.danger
 
 
@@ -162,7 +163,7 @@ class SetupView(discord.ui.View):
             # ERROR: Send publicly
             return await interaction.followup.send("❌ **Error:** No category is configured or the category is empty.")
 
-        # Determine current visibility state based on the first channel in the category
+        # Determine current visibility state
         is_currently_hidden = await self.cog._is_managed_category_hidden(interaction.guild)
         
         perm_action = None
@@ -173,7 +174,7 @@ class SetupView(discord.ui.View):
             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
                 role, overwrite=None, reason=reason
             )
-            new_button_label = "Hide Channels"
+            new_button_label = "Hide"
             new_button_style = discord.ButtonStyle.danger
         else: 
             # Action: HIDE (Apply Admin Denial)
@@ -181,7 +182,7 @@ class SetupView(discord.ui.View):
             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
                 role, view_channel=False, reason=reason
             )
-            new_button_label = "Show Channels"
+            new_button_label = "Show"
             new_button_style = discord.ButtonStyle.success
         
         # Apply permissions across all channels in the managed category
@@ -297,7 +298,7 @@ class AfterworkHide(commands.Cog, name="AfterworkHide"):
         initial_enabled = await self.config.guild(ctx.guild).enabled()
         initial_hidden = await self._is_managed_category_hidden(ctx.guild)
 
-        initial_embed = discord.Embed(title="Hidden Channel", color=discord.Color.dark_theme())
+        initial_embed = discord.Embed(title="Hidden Channel", description="This tool manages the visibility of all channels within a configured category. Channels are hidden from roles with Administrator or Manage Channels permissions.", color=discord.Color.blue())
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
         
         view = SetupView(self, initial_enabled=initial_enabled, initial_hidden=initial_hidden)
@@ -317,5 +318,4 @@ class AfterworkHide(commands.Cog, name="AfterworkHide"):
 
 async def setup(bot):
     cog = AfterworkHide(bot)
-    await cog.initialize()
     await bot.add_cog(cog)
