@@ -11,10 +11,19 @@ log = logging.getLogger("red.AfterworkMB")
 
 # --- UTILITY FUNCTIONS ---
 
-def _get_admin_footer(interaction: discord.Interaction, status_action: str) -> str:
+# FIX APPLIED HERE: Function now checks if the passed object is a Context or an Interaction
+def _get_admin_footer(obj: (discord.Interaction | commands.Context), status_action: str) -> str:
     """Helper to generate the administrative footer format."""
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    return f"e.Network | {status_action} by {interaction.user.display_name} {current_time}"
+    
+    # Determine the user based on the object type
+    if isinstance(obj, commands.Context):
+        user_display_name = obj.author.display_name
+    else:
+        # Assumes the object is an Interaction if not a Context
+        user_display_name = obj.user.display_name
+        
+    return f"e.Network | {status_action} by {user_display_name} {current_time}"
 
 async def _send_owner_dm(bot, message: str):
     """Sends a critical error message directly to the bot owner."""
@@ -267,6 +276,7 @@ class AfterworkMB(commands.Cog, name="AfterworkMB"):
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
         
         initial_enabled = await self.config.guild(ctx.guild).enabled()
+        # This call is now fixed, passing a Context object
         initial_embed.set_footer(text=_get_admin_footer(ctx, "Configuration Hub Deployed"))
 
         view = SetupView(self, initial_enabled=initial_enabled)
