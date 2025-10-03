@@ -8,7 +8,7 @@ from typing import Optional
 
 log = logging.getLogger("red.AfterworkMB") 
 
-# --- UTILITY FUNCTIONS ---
+# --- UTILITY FUNCTIONS (omitted for brevity, assume unchanged) ---
 
 def _get_admin_footer(obj, status_action: str) -> str:
     """Helper to generate the administrative footer format."""
@@ -53,14 +53,13 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     else:
         channel_list_display = "*No named channels configured*"
     
-    # CHANGE APPLIED: Removed "Click Message..." sentence
     embed.description = (
         "Configure and save channel IDs with a name, then use that name to send the embed message."
     )
     
     embed.clear_fields()
     
-    # CHANGE APPLIED: Only add fields if the system is ENABLED
+    # Fields are now always added when ENABLED for clear view (since buttons are always visible)
     if is_enabled:
         embed.add_field(name="Configured Channels (Name -> ID)", value=channel_list_display, inline=False)
         
@@ -240,18 +239,15 @@ class SetupView(discord.ui.View):
         
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
-
-        # Conditionally add configuration buttons if the system is ENABLED
-        if initial_enabled:
-            self.add_item(self.set_channel_button)
-            self.add_item(self.send_message_button)
-            self.add_item(self.remove_channel_button)
-            
-        # Always add the toggle button 
-        self.add_item(self.toggle_system)
         
-    # Define all buttons using simple methods, but only add them in __init__
+        # ALL buttons are added here. Disabled state is handled by the buttons' `disabled` property.
+        self.add_item(self.set_channel_button)
+        self.add_item(self.send_message_button)
+        self.add_item(self.remove_channel_button)
+        self.add_item(self.toggle_system) # This remains active and is the only button that controls disabled state
 
+    # Define all buttons using simple methods, setting disabled state here
+    
     @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="mb_set_channel_button", row=0)
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Launches the modal to configure and name the target channel ID."""
@@ -289,7 +285,7 @@ class SetupView(discord.ui.View):
         modal = RemoveChannelModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="mb_toggle_system_main", row=1) 
+    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="mb_toggle_system_main", row=0) 
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Toggles the system status (Enabled/Disabled)."""
         if not await self.cog.bot.is_owner(interaction.user): 
@@ -310,14 +306,24 @@ class SetupView(discord.ui.View):
         
         await _update_setup_embed(self.cog, interaction.guild, embed)
         
-        # 2. Re-create and edit the view to hide/show config buttons and fields
+        # 2. Re-create the view, setting disabled state based on new_state
         new_view = SetupView(self.cog, initial_enabled=new_state)
         await interaction.message.edit(embed=embed, view=new_view) 
         
         await interaction.followup.send(f"System has been **{'enabled' if new_state else 'disabled'}**.", ephemeral=True)
 
+    # Overriding the default behaviour of add_item to apply disabled state logic
+    def add_item(self, item: discord.ui.Item) -> None:
+        
+        # Set the disabled state for the config buttons based on the system state
+        is_config_button = item.custom_id in ["mb_set_channel_button", "mb_send_message_button", "mb_remove_channel"]
+        if is_config_button:
+            item.disabled = not self.initial_enabled
+        
+        super().add_item(item)
 
-# --- MAIN COG CLASS ---
+
+# --- MAIN COG CLASS (omitted for brevity, assume unchanged) ---
 
 class AfterworkMB(commands.Cog, name="AfterworkMB"): 
     """
