@@ -46,12 +46,11 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     
     return embed
 
-# --- MODAL (The Fill-in Box for Channel IDs) ---
+# --- MODALS (Single Input Boxes) ---
 
-class ChannelIDModal(discord.ui.Modal, title="Set Webhook Channels"):
-    """A Modal to collect both Source and Destination Channel IDs."""
-    
-    source_channel_id_input = discord.ui.TextInput(
+class SourceChannelModal(discord.ui.Modal, title="Set Source Channel"):
+    """A Modal to collect the Source Channel ID."""
+    channel_id_input = discord.ui.TextInput(
         label="Source Channel ID (Webhook Input)",
         style=discord.TextStyle.short,
         placeholder="Paste the ID of the channel where webhooks arrive.",
@@ -59,8 +58,33 @@ class ChannelIDModal(discord.ui.Modal, title="Set Webhook Channels"):
         max_length=20,
     )
     
-    dest_channel_id_input = discord.ui.TextInput(
-        label="Destination Channel ID (Clean Output)",
+    def __init__(self, cog: commands.Cog, original_message: discord.Message):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.original_message = original_message
+
+    async def on_submit(self, interaction: discord.Interaction):
+        input_id = self.channel_id_input.value.strip()
+        try:
+            channel_id = int(input_id)
+        except ValueError:
+            return await interaction.response.send_message("❌ **Error:** Input must be a valid channel ID.", ephemeral=True)
+        
+        channel = interaction.guild.get_channel(channel_id)
+        if not channel or not isinstance(channel, discord.TextChannel):
+            return await interaction.response.send_message(f"❌ **Error:** Could not find a Text Channel with ID `{channel_id}`.", ephemeral=True)
+
+        await self.cog.config.guild(interaction.guild).source_channel.set(channel_id)
+        
+        embed = self.original_message.embeds[0]
+        embed.set_footer(text=f"Source channel updated by {interaction.user.display_name} | {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        await _update_setup_embed(self.cog, interaction.guild, embed)
+        await interaction.response.edit_message(embed=embed)
+
+class TargetChannelModal(discord.ui.Modal, title="Set Target Channel"):
+    """A Modal to collect the Target (Destination) Channel ID."""
+    channel_id_input = discord.ui.TextInput(
+        label="Target Channel ID (Clean Output)",
         style=discord.TextStyle.short,
         placeholder="Paste the ID of the channel for the clean embeds.",
         required=True,
@@ -73,36 +97,22 @@ class ChannelIDModal(discord.ui.Modal, title="Set Webhook Channels"):
         self.original_message = original_message
 
     async def on_submit(self, interaction: discord.Interaction):
-        source_input_id = self.source_channel_id_input.value.strip()
-        dest_input_id = self.dest_channel_id_input.value.strip()
-        
+        input_id = self.channel_id_input.value.strip()
         try:
-            source_id = int(source_input_id)
-            dest_id = int(dest_input_id)
+            channel_id = int(input_id)
         except ValueError:
-            return await interaction.response.send_message("❌ **Error:** Both inputs must be valid channel IDs (numbers only).", ephemeral=True)
-        
-        source_channel = interaction.guild.get_channel(source_id)
-        dest_channel = interaction.guild.get_channel(dest_id)
+            return await interaction.response.send_message("❌ **Error:** Input must be a valid channel ID.", ephemeral=True)
 
-        if not source_channel or not isinstance(source_channel, discord.TextChannel):
-            return await interaction.response.send_message(f"❌ **Error:** Could not find a Text Channel with the Source ID `{source_id}`.", ephemeral=True)
-        
-        if not dest_channel or not isinstance(dest_channel, discord.TextChannel):
-            return await interaction.response.send_message(f"❌ **Error:** Could not find a Text Channel with the Destination ID `{dest_id}`.", ephemeral=True)
+        channel = interaction.guild.get_channel(channel_id)
+        if not channel or not isinstance(channel, discord.TextChannel):
+            return await interaction.response.send_message(f"❌ **Error:** Could not find a Text Channel with ID `{channel_id}`.", ephemeral=True)
 
-        # Save configuration
-        await self.cog.config.guild(interaction.guild).source_channel.set(source_id)
-        await self.cog.config.guild(interaction.guild).dest_channel.set(dest_id)
-        await self.cog.config.guild(interaction.guild).enabled.set(True) # Auto-enable on new config
-        
-        # Update the hub message
+        await self.cog.config.guild(interaction.guild).dest_channel.set(channel_id)
+
         embed = self.original_message.embeds[0]
-        embed.set_footer(text=f"Last updated by {interaction.user.display_name} | {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        embed.set_footer(text=f"Target channel updated by {interaction.user.display_name} | {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
         await _update_setup_embed(self.cog, interaction.guild, embed)
-        
-        view = SetupView(self.cog, initial_enabled=True)
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embed=embed)
 
 # --- VIEW (The Persistent Setup Hub) ---
 
@@ -116,11 +126,18 @@ class SetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    @discord.ui.button(label="Set Channels", style=discord.ButtonStyle.primary, custom_id="tv_set_channels_button", row=0)
-    async def set_channels_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="Set Source", style=discord.ButtonStyle.primary, custom_id="tv_set_source_button", row=0)
+    async def set_source_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user):
             return await interaction.response.send_message("Only the bot owner can use this setup tool.", ephemeral=True)
-        modal = ChannelIDModal(self.cog, interaction.message)
+        modal = SourceChannelModal(self.cog, interaction.message)
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(label="Set Target", style=discord.ButtonStyle.primary, custom_id="tv_set_target_button", row=0)
+    async def set_target_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self.cog.bot.is_owner(interaction.user):
+            return await interaction.response.send_message("Only the bot owner can use this setup tool.", ephemeral=True)
+        modal = TargetChannelModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="Toggle System", style=discord.ButtonStyle.secondary, custom_id="tv_toggle_button", row=0)
@@ -237,14 +254,15 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
                     new_embed.set_thumbnail(url=emb.thumbnail.url)
                 
                 try:
-                    await dest_channel.send(embed=new_embed)
+                    sent_message = await dest_channel.send(embed=new_embed)
+                    # --- DIAGNOSTIC LOGGING ---
+                    log.info(f"Successfully reposted webhook to {dest_channel.name}. New message ID: {sent_message.id}")
                 except discord.Forbidden:
                     error_msg = (
                         f"Failed to repost webhook embed in **{message.guild.name}**.\n"
                         f"I lack **Send Messages** or **Embed Links** permission in the destination channel: {dest_channel.mention}."
                     )
                     await _send_owner_dm(self.bot, error_msg)
-                    # Disable the cog for this guild to prevent spamming DMs
                     await self.config.guild(message.guild).enabled.set(False)
                 except Exception as e:
                     log.exception(f"An unexpected error occurred while forwarding an embed: {e}")
