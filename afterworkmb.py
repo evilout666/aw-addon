@@ -8,7 +8,7 @@ from typing import Optional
 
 log = logging.getLogger("red.AfterworkMB") 
 
-# --- UTILITY FUNCTIONS (omitted for brevity, assume unchanged) ---
+# --- UTILITY FUNCTIONS ---
 
 def _get_admin_footer(obj, status_action: str) -> str:
     """Helper to generate the administrative footer format."""
@@ -59,7 +59,6 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     
     embed.clear_fields()
     
-    # Fields are now always added when ENABLED for clear view (since buttons are always visible)
     if is_enabled:
         embed.add_field(name="Configured Channels (Name -> ID)", value=channel_list_display, inline=False)
         
@@ -71,7 +70,7 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     
     return embed
 
-# --- MODALS (omitted for brevity, assume unchanged) ---
+# --- MODALS ---
 
 class NamedChannelSetModal(discord.ui.Modal, title="Save Named Channel ID"):
     name_input = discord.ui.TextInput(
@@ -240,14 +239,10 @@ class SetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
         
-        # ALL buttons are added here. Disabled state is handled by the buttons' `disabled` property.
-        self.add_item(self.set_channel_button)
-        self.add_item(self.send_message_button)
-        self.add_item(self.remove_channel_button)
-        self.add_item(self.toggle_system) # This remains active and is the only button that controls disabled state
+        # All buttons are automatically added via decorator. We just rely on the layout and the add_item override.
 
-    # Define all buttons using simple methods, setting disabled state here
-    
+    # Define all buttons using simple methods, setting disabled state via add_item override.
+
     @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="mb_set_channel_button", row=0)
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Launches the modal to configure and name the target channel ID."""
@@ -306,7 +301,7 @@ class SetupView(discord.ui.View):
         
         await _update_setup_embed(self.cog, interaction.guild, embed)
         
-        # 2. Re-create the view, setting disabled state based on new_state
+        # 2. Re-create the view, triggering the add_item override logic
         new_view = SetupView(self.cog, initial_enabled=new_state)
         await interaction.message.edit(embed=embed, view=new_view) 
         
@@ -316,6 +311,7 @@ class SetupView(discord.ui.View):
     def add_item(self, item: discord.ui.Item) -> None:
         
         # Set the disabled state for the config buttons based on the system state
+        # The toggle button is NOT included here, so it remains active.
         is_config_button = item.custom_id in ["mb_set_channel_button", "mb_send_message_button", "mb_remove_channel"]
         if is_config_button:
             item.disabled = not self.initial_enabled
@@ -323,7 +319,7 @@ class SetupView(discord.ui.View):
         super().add_item(item)
 
 
-# --- MAIN COG CLASS (omitted for brevity, assume unchanged) ---
+# --- MAIN COG CLASS ---
 
 class AfterworkMB(commands.Cog, name="AfterworkMB"): 
     """
