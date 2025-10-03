@@ -28,20 +28,23 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     """Refreshes the configuration data shown in the setup embed."""
     settings = await cog.config.guild(guild).all()
     dest_id = settings.get('dest_channel')
-    user_id = settings.get('webhook_user_id')
+    radarr_id = settings.get('radarr_webhook_id')
+    sonarr_id = settings.get('sonarr_webhook_id')
     is_enabled = settings.get('enabled', False)
 
     dest_channel = cog.bot.get_channel(dest_id)
-    webhook_user_display = f"`{user_id}`" if user_id else "*Not configured*"
     
+    radarr_display = f"`{radarr_id}`" if radarr_id else "*Not configured*"
+    sonarr_display = f"`{sonarr_id}`" if sonarr_id else "*Not configured*"
     status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
     dest_name = f"**{dest_channel.name}** (`{dest_id}`)" if dest_channel else "*Not configured*"
     
-    embed.description = "Use this panel to manage the webhook reformatter."
+    embed.description = "Configure the refined news feed for the latest movies and TV shows."
     embed.clear_fields()
     
     embed.add_field(name="System Status", value=status_emoji, inline=True)
-    embed.add_field(name="Integration ID", value=webhook_user_display, inline=False)
+    embed.add_field(name="Radarr Integration ID", value=radarr_display, inline=False)
+    embed.add_field(name="Sonarr Integration ID", value=sonarr_display, inline=False)
     embed.add_field(name="Destination Channel", value=dest_name, inline=False)
     
     return embed
@@ -63,28 +66,31 @@ class TargetChannelModal(discord.ui.Modal, title="Set Target Channel"):
         await _update_setup_embed(self.cog,interaction.guild,embed)
         await interaction.response.edit_message(embed=embed)
 
-class UserIDModal(discord.ui.Modal, title="Set Integration ID"):
-    user_id_input = discord.ui.TextInput(
-        label="Integration ID",
-        style=discord.TextStyle.short,
-        placeholder="Paste the ID of the integration that posts webhooks.",
-        required=True,
-        max_length=20,
-    )
+class RadarrIDModal(discord.ui.Modal, title="Set Radarr Integration ID"):
+    user_id_input = discord.ui.TextInput(label="Radarr Integration ID",style=discord.TextStyle.short,placeholder="Paste the ID for Radarr webhooks.",required=True,max_length=20,)
     def __init__(self, cog: commands.Cog, original_message: discord.Message):
-        super().__init__(timeout=300)
-        self.cog = cog
-        self.original_message = original_message
+        super().__init__(timeout=300);self.cog = cog;self.original_message = original_message
     async def on_submit(self, interaction: discord.Interaction):
         input_id = self.user_id_input.value.strip()
-        try:
-            user_id = int(input_id)
-        except ValueError:
-            return await interaction.response.send_message("❌ **Error:** Input must be a valid numerical ID.", ephemeral=True)
-        
-        await self.cog.config.guild(interaction.guild).webhook_user_id.set(user_id)
+        try:user_id = int(input_id)
+        except ValueError:return await interaction.response.send_message("❌ Invalid ID.", ephemeral=True)
+        await self.cog.config.guild(interaction.guild).radarr_webhook_id.set(user_id)
         embed = self.original_message.embeds[0]
-        embed.set_footer(text=f"Integration ID updated by {interaction.user.display_name}")
+        embed.set_footer(text=f"Radarr ID updated by {interaction.user.display_name}")
+        await _update_setup_embed(self.cog, interaction.guild, embed)
+        await interaction.response.edit_message(embed=embed)
+
+class SonarrIDModal(discord.ui.Modal, title="Set Sonarr Integration ID"):
+    user_id_input = discord.ui.TextInput(label="Sonarr Integration ID",style=discord.TextStyle.short,placeholder="Paste the ID for Sonarr webhooks.",required=True,max_length=20,)
+    def __init__(self, cog: commands.Cog, original_message: discord.Message):
+        super().__init__(timeout=300);self.cog = cog;self.original_message = original_message
+    async def on_submit(self, interaction: discord.Interaction):
+        input_id = self.user_id_input.value.strip()
+        try:user_id = int(input_id)
+        except ValueError:return await interaction.response.send_message("❌ Invalid ID.", ephemeral=True)
+        await self.cog.config.guild(interaction.guild).sonarr_webhook_id.set(user_id)
+        embed = self.original_message.embeds[0]
+        embed.set_footer(text=f"Sonarr ID updated by {interaction.user.display_name}")
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.response.edit_message(embed=embed)
 
@@ -104,12 +110,17 @@ class SetupView(discord.ui.View):
         if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         await interaction.response.send_modal(TargetChannelModal(self.cog, interaction.message))
 
-    @discord.ui.button(label="Integration ID", style=discord.ButtonStyle.primary, custom_id="tv_set_user_id_button", row=0)
-    async def set_user_id_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="Radarr ID", style=discord.ButtonStyle.primary, custom_id="tv_set_radarr_id_button", row=0)
+    async def set_radarr_id_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
-        await interaction.response.send_modal(UserIDModal(self.cog, interaction.message))
+        await interaction.response.send_modal(RadarrIDModal(self.cog, interaction.message))
 
-    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="tv_toggle_button", row=0)
+    @discord.ui.button(label="Sonarr ID", style=discord.ButtonStyle.primary, custom_id="tv_set_sonarr_id_button", row=0)
+    async def set_sonarr_id_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
+        await interaction.response.send_modal(SonarrIDModal(self.cog, interaction.message))
+
+    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="tv_toggle_button", row=1)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         new_state = not (await self.cog.config.guild(interaction.guild).enabled())
@@ -134,7 +145,8 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
         self.config.register_guild(
             enabled=False,
             dest_channel=None,
-            webhook_user_id=None,
+            radarr_webhook_id=None,
+            sonarr_webhook_id=None,
             setup_message_id=None
         )
 
@@ -159,7 +171,7 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
                 old_message = await ctx.channel.fetch_message(old_message_id)
                 await old_message.delete()
             except discord.HTTPException: pass
-        initial_embed = discord.Embed(title="Radarr/Sonarr", color=discord.Color.blue())
+        initial_embed = discord.Embed(title="Radarr and Sonarr", color=discord.Color.blue())
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
         initial_enabled = await self.config.guild(ctx.guild).enabled()
         view = SetupView(self, initial_enabled=initial_enabled)
@@ -179,8 +191,12 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
     async def on_message(self, message: discord.Message):
         if not message.guild or not message.embeds: return
         data = await self.config.guild(message.guild).all()
-        webhook_user_id = data.get('webhook_user_id')
-        if not data.get('enabled') or not webhook_user_id or message.author.id != webhook_user_id:
+        
+        radarr_id = data.get('radarr_webhook_id')
+        sonarr_id = data.get('sonarr_webhook_id')
+        
+        # Check if the system is enabled and if the author matches either configured ID
+        if not data.get('enabled') or message.author.id not in [radarr_id, sonarr_id]:
             return
 
         for emb in message.embeds:
@@ -236,9 +252,7 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
                 dest_channel = self.bot.get_channel(data.get('dest_channel'))
                 if dest_channel:
                     try:
-                        sent_msg = await dest_channel.send(embed=new_embed)
-                        # Keep this one log for successful operations
-                        log.info(f"Successfully reposted webhook embed to #{dest_channel.name} (ID: {sent_msg.id})")
+                        await dest_channel.send(embed=new_embed)
                     except discord.Forbidden: 
                         await _send_owner_dm(self.bot, f"Failed to post embed in {dest_channel.mention} due to permissions.")
 
