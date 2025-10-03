@@ -38,7 +38,7 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
     dest_name = f"**{dest_channel.name}** (`{dest_id}`)" if dest_channel else "*Not configured*"
     
-    embed.description = "Use this panel to manage the Sonarr/Radarr webhook reformatter."
+    embed.description = "Use this panel to manage the webhook reformatter."
     embed.clear_fields()
     
     embed.add_field(name="System Status", value=status_emoji, inline=True)
@@ -197,66 +197,21 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # --- DIAGNOSTIC LOGGING ---
-        log.info(f"[AfterworkTV] New message detected in '{message.channel.name}' from '{message.author.name}' (ID: {message.author.id})")
-
-        if not message.guild or not message.embeds:
-            log.info("[AfterworkTV] Message ignored: Not in a guild or no embeds.")
-            return
-            
+        if not message.guild or not message.embeds: return
         data = await self.config.guild(message.guild).all()
         webhook_user_id = data.get('webhook_user_id')
-
-        log.info(f"[AfterworkTV] Config check: Enabled={data.get('enabled')}, Configured ID={webhook_user_id}")
-
-        if not data.get('enabled'):
-            log.info("[AfterworkTV] Message ignored: System is disabled in config.")
+        if not data.get('enabled') or not webhook_user_id or message.author.id != webhook_user_id:
             return
-        if not webhook_user_id:
-            log.info("[AfterworkTV] Message ignored: Webhook User ID is not configured.")
-            return
-        if message.author.id != webhook_user_id:
-            log.info(f"[AfterworkTV] Message ignored: Author ID ({message.author.id}) does not match configured ID ({webhook_user_id}).")
-            return
-        
-        log.info("[AfterworkTV] All initial checks passed. Processing embeds...")
-        # --- END DIAGNOSTIC LOGGING ---
             
         grouping_enabled = data.get('group_season_grabs', True)
+
         for emb in message.embeds:
-            footer = (emb.footer.text or "") if emb.footer else ""
-            if "Radarr" in footer:
-                new_embed=discord.Embed(title=emb.title,description=emb.description,color=emb.color)
-                if emb.thumbnail:new_embed.set_thumbnail(url=emb.thumbnail.url)
-                dest_channel=self.bot.get_channel(data.get('dest_channel'))
-                if dest_channel:
-                    try:
-                        sent_msg = await dest_channel.send(embed=new_embed)
-                        log.info(f"Reposted Radarr webhook. ID: {sent_msg.id}")
-                    except discord.Forbidden: await _send_owner_dm(self.bot, "Failed to post Radarr embed.")
-                continue
-            if "Sonarr" in footer:
-                if not grouping_enabled:
-                    new_embed=discord.Embed(title=emb.title,description=emb.description,color=emb.color)
-                    if emb.thumbnail:new_embed.set_thumbnail(url=emb.thumbnail.url)
-                    dest_channel=self.bot.get_channel(data.get('dest_channel'))
-                    if dest_channel:
-                        try:
-                            sent_msg=await dest_channel.send(embed=new_embed)
-                            log.info(f"Reposted Sonarr webhook. ID: {sent_msg.id}")
-                        except discord.Forbidden: await _send_owner_dm(self.bot, "Failed to post Sonarr embed.")
-                    continue
-                match = re.match(r"^(.*?) - S(\d+)E(\d+)", emb.title or "")
-                if not match:
-                    new_embed=discord.Embed(title=emb.title,description=emb.description,color=emb.color)
-                    if emb.thumbnail:new_embed.set_thumbnail(url=emb.thumbnail.url)
-                    dest_channel=self.bot.get_channel(data.get('dest_channel'))
-                    if dest_channel:
-                        try:
-                            sent_msg=await dest_channel.send(embed=new_embed)
-                            log.info(f"Reposted non-standard Sonarr. ID: {sent_msg.id}")
-                        except discord.Forbidden: await _send_owner_dm(self.bot, "Failed to post Sonarr embed.")
-                    continue
+            # --- IMPROVED REGEX LOGIC ---
+            # This pattern handles both "S01E01" and "19x01" formats.
+            match = re.match(r"^(.*?) - (?:S)?(\d+)[xE](\d+)", emb.title or "")
+
+            if match and grouping_enabled:
+                # It's a TV show, and grouping is on. Apply debounce logic.
                 series_title = match.group(1).strip()
                 season_num = int(match.group(2))
                 buffer_key = (message.guild.id, series_title, season_num)
@@ -266,6 +221,18 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
                 log.info(f"Starting debounce for {series_title} S{season_num}.")
                 task = asyncio.create_task(self._debounce_sonarr_post(message.guild.id, series_title, season_num, emb))
                 self.grab_buffer[buffer_key] = task
+            else:
+                # It's a Movie, a non-standard message, or grouping is disabled. Post it immediately.
+                log.info("Processing as a direct post (Movie, non-standard, or grouping disabled).")
+                new_embed=discord.Embed(title=emb.title,description=emb.description,color=emb.color)
+                if emb.thumbnail:new_embed.set_thumbnail(url=emb.thumbnail.url)
+                dest_channel=self.bot.get_channel(data.get('dest_channel'))
+                if dest_channel:
+                    try:
+                        sent_msg = await dest_channel.send(embed=new_embed)
+                        log.info(f"Reposted webhook. ID: {sent_msg.id}")
+                    except discord.Forbidden: 
+                        await _send_owner_dm(self.bot, f"Failed to post embed in {dest_channel.mention} due to permissions.")
 
 async def setup(bot):
     cog = AfterworkTV(bot)
