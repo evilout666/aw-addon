@@ -39,7 +39,11 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
     source_name = f"**{source_channel.name}** (`{source_id}`)" if source_channel else "*Not configured*"
     
-    embed.description = "Use this panel to set the source voice channel where new rooms are spawned."
+    # NEW LONGER 2-LINE DESCRIPTION
+    embed.description = (
+        "This administrative panel is used to specify the source voice channel ID, enabling the creation\n"
+        "of dynamic, temporary voice rooms when a user joins this specified channel."
+    )
     embed.clear_fields()
     
     embed.add_field(name="System Status", value=status_emoji, inline=False)
@@ -423,4 +427,5 @@ class AfterWorkVC(commands.Cog, name="AfterWorkVC"):
 
 async def setup(bot):
     cog = AfterWorkVC(bot)
+    await cog.initialize()
     await bot.add_cog(cog)
