@@ -10,7 +10,6 @@ log = logging.getLogger("red.AfterworkMB")
 
 # --- UTILITY FUNCTIONS ---
 
-# FIX RETAINED: Function handles both Context and Interaction objects
 def _get_admin_footer(obj, status_action: str) -> str:
     """Helper to generate the administrative footer format."""
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -40,22 +39,30 @@ async def _send_owner_dm(bot, message: str):
 async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: discord.Embed):
     """Refreshes the configuration data shown in the setup embed."""
     settings = await cog.config.guild(guild).all()
-    channel_id = settings.get('target_channel_id') 
-    is_enabled = settings.get('enabled', False)
+    named_channels = settings.get('named_channels', {})
+    is_enabled = settings.get('enabled', False) # Kept for structure
 
     status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
     
-    target_channel = guild.get_channel(channel_id)
-    channel_display = f"**{target_channel.name}** (`{channel_id}`)" if target_channel else "*Not configured*"
+    # List all saved named channels
+    channel_list = []
+    if named_channels:
+        for name, id in named_channels.items():
+            channel = guild.get_channel(id)
+            channel_name = f"#{channel.name}" if channel else "Unknown Channel"
+            channel_list.append(f"• **{name}** -> {channel_name} (`{id}`)")
+        channel_list_display = "\n".join(channel_list)
+    else:
+        channel_list_display = "*No named channels configured*"
     
     embed.description = (
-        "Use the buttons to configure the target channel and the embed JSON payload.\n"
-        "Click **Send Msg** to open the payload editor and send the final message."
+        "Configure and save channel IDs with a name, then use that name to send the embed message.\n"
+        "Click **Message** to open the payload editor and send the final message."
     )
     embed.clear_fields()
     
     embed.add_field(name="System Status", value=status_emoji, inline=False)
-    embed.add_field(name="Target Channel", value=channel_display, inline=False)
+    embed.add_field(name="Configured Channels (Name -> ID)", value=channel_list_display, inline=False)
     
     embed.add_field(
         name="Message Payload", 
@@ -67,11 +74,18 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
 
 # --- MODALS ---
 
-class ChannelIDModal(discord.ui.Modal, title="Set Target Channel ID"):
-    channel_id_input = discord.ui.TextInput(
-        label="Target Channel ID (Numbers Only)",
+class NamedChannelSetModal(discord.ui.Modal, title="Save Named Channel ID"):
+    name_input = discord.ui.TextInput(
+        label="Configuration Name (e.g., 'general')",
         style=discord.TextStyle.short,
-        placeholder="ID where the embed will be sent.",
+        placeholder="A unique name to reference this channel.",
+        required=True,
+        max_length=50,
+    )
+    channel_id_input = discord.ui.TextInput(
+        label="Source Channel ID (Numbers Only)",
+        style=discord.TextStyle.short,
+        placeholder="ID where messages will be sent.",
         required=True,
         max_length=20,
     )
@@ -83,6 +97,7 @@ class ChannelIDModal(discord.ui.Modal, title="Set Target Channel ID"):
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
+        name = self.name_input.value.strip().lower()
         input_channel_id = self.channel_id_input.value.strip()
         
         try:
@@ -94,22 +109,30 @@ class ChannelIDModal(discord.ui.Modal, title="Set Target Channel ID"):
         if not channel or not isinstance(channel, discord.TextChannel):
             return await interaction.followup.send(f"❌ **Error:** Could not find a Text Channel with the ID `{channel_id}`.", ephemeral=True)
 
-        # Save configuration
-        await self.cog.config.guild(interaction.guild).target_channel_id.set(channel_id)
+        # Save to named_channels
+        async with self.cog.config.guild(interaction.guild).named_channels() as channels:
+            channels[name] = channel_id
         
         # Update the original setup message
         embed = self.original_message.embeds[0]
-        embed.set_footer(text=_get_admin_footer(interaction, "Target channel updated"))
+        embed.set_footer(text=_get_admin_footer(interaction, f"Channel '{name}' updated"))
 
         await _update_setup_embed(self.cog, interaction.guild, embed)
         
-        # Edit message to update the embed
-        await self.original_message.edit(embed=embed)
+        view = SetupView(self.cog, initial_enabled=await self.cog.config.guild(interaction.guild).enabled())
+        await self.original_message.edit(embed=embed, view=view)
         
-        await interaction.followup.send("✅ Target Channel ID saved.", ephemeral=True)
+        await interaction.followup.send(f"✅ Channel **{name}** set to **#{channel.name}**.", ephemeral=True)
 
 
-class JSONPayloadModal(discord.ui.Modal, title="Send Embed Message"):
+class NamedMessageSendModal(discord.ui.Modal, title="Send Embed Message"):
+    name_input = discord.ui.TextInput(
+        label="Configuration Name",
+        style=discord.TextStyle.short,
+        placeholder="The name of the saved channel (e.g., 'general').",
+        required=True,
+        max_length=50,
+    )
     json_input = discord.ui.TextInput(
         label="JSON Embed Payload",
         style=discord.TextStyle.long,
@@ -124,28 +147,28 @@ class JSONPayloadModal(discord.ui.Modal, title="Send Embed Message"):
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
+        name = self.name_input.value.strip().lower()
         json_payload = self.json_input.value.strip()
         
         settings = await self.cog.config.guild(interaction.guild).all()
-        channel_id = settings.get('target_channel_id')
-        is_enabled = settings.get('enabled')
-
-        # 1. Validation and early exit checks
-        if not is_enabled:
-            return await interaction.followup.send("❌ **Error:** System is disabled. Please enable it first.", ephemeral=True)
+        named_channels = settings.get('named_channels', {})
+        
+        # 1. Channel Lookup
+        channel_id = named_channels.get(name)
         if not channel_id:
-            return await interaction.followup.send("❌ **Error:** Target Channel ID is not configured. Use the 'Channel ID' button first.", ephemeral=True)
-
+            return await interaction.followup.send(f"❌ **Error:** No channel found with the name `{name}`. Use the 'Channel ID' button to save one.", ephemeral=True)
+        
         target_channel = interaction.guild.get_channel(channel_id)
         if not target_channel or not isinstance(target_channel, discord.TextChannel):
-            return await interaction.followup.send("❌ **Error:** Configured Target Channel not found or is not a text channel.", ephemeral=True)
+            return await interaction.followup.send(f"❌ **Error:** Saved Channel for `{name}` is invalid or not a text channel.", ephemeral=True)
             
         # 2. Save new JSON payload and Validate
         try:
             embed_data = json.loads(json_payload)
             if not isinstance(embed_data, dict):
                 raise ValueError("JSON must be an object.")
-            await self.cog.config.guild(interaction.guild).json_payload.set(json_payload)
+            # Always save the last payload globally
+            await self.cog.config.guild(interaction.guild).json_payload.set(json_payload) 
         except (json.JSONDecodeError, ValueError):
             return await interaction.followup.send("❌ **Error:** Invalid JSON payload provided.", ephemeral=True)
 
@@ -156,13 +179,13 @@ class JSONPayloadModal(discord.ui.Modal, title="Send Embed Message"):
             
             # 4. Update view and send feedback
             embed_msg = self.original_message.embeds[0]
-            embed_msg.set_footer(text=_get_admin_footer(interaction, "Embed sent and data updated"))
+            embed_msg.set_footer(text=_get_admin_footer(interaction, f"Message sent to '{name}'"))
             await _update_setup_embed(self.cog, interaction.guild, embed_msg)
             
-            view = SetupView(self.cog, initial_enabled=is_enabled)
+            view = SetupView(self.cog, initial_enabled=await self.cog.config.guild(interaction.guild).enabled())
             await self.original_message.edit(embed=embed_msg, view=view)
             
-            await interaction.followup.send(f"✅ Embed sent successfully to {target_channel.mention} and JSON payload saved.", ephemeral=True)
+            await interaction.followup.send(f"✅ Embed sent successfully to **{name}** ({target_channel.mention}).", ephemeral=True)
             
         except Exception as e:
             log.error(f"Error sending embed: {e}", exc_info=True)
@@ -177,68 +200,58 @@ class SetupView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
         
-        self.toggle_system.label = "Disable" if initial_enabled else "Enable"
-        self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
+        # NOTE: The toggle_system logic/button is removed/replaced by Clear
 
     @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="mb_set_channel_button", row=0)
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Launches the modal to configure the target channel."""
+        """Launches the modal to configure and name the target channel ID."""
         if not await self.cog.bot.is_owner(interaction.user): 
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
             
-        modal = ChannelIDModal(self.cog, interaction.message)
+        modal = NamedChannelSetModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Send Msg", style=discord.ButtonStyle.primary, custom_id="mb_send_message_button", row=0)
+    @discord.ui.button(label="Message", style=discord.ButtonStyle.primary, custom_id="mb_send_message_button", row=0)
     async def send_message_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Launches the modal to configure and send the JSON embed."""
+        """Launches the modal to specify the named channel and send the JSON embed."""
         if not await self.cog.bot.is_owner(interaction.user): 
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
             
-        modal = JSONPayloadModal(self.cog, interaction.message)
+        modal = NamedMessageSendModal(self.cog, interaction.message)
         
+        # Pre-fill modal with the last saved JSON
         current_json = await self.cog.config.guild(interaction.guild).json_payload()
-        
-        # --- FIX APPLIED HERE: Check for and replace stale saved config value ---
-        OLD_TITLE_PAYLOAD = '{"title": "Afterwork Button Embed", "color": 3447003}'
-        NEW_TITLE_PAYLOAD = '{"title": "Test Message", "color": 3447003}'
-
-        if current_json == OLD_TITLE_PAYLOAD:
-             await self.cog.config.guild(interaction.guild).json_payload.set(NEW_TITLE_PAYLOAD)
-             current_json = NEW_TITLE_PAYLOAD # Use the new value for the modal
-        # --- END FIX ---
-        
         modal.json_input.default = current_json
         
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="template_toggle_button", row=0)
-    async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="Clear", style=discord.ButtonStyle.danger, custom_id="mb_clear_channels", row=0)
+    async def clear_channel_configs(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Clears all saved named channel configurations."""
         if not await self.cog.bot.is_owner(interaction.user): 
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         
         await interaction.response.defer(ephemeral=True, thinking=True)
         
-        new_state = not (await self.cog.config.guild(interaction.guild).enabled())
-        await self.cog.config.guild(interaction.guild).enabled.set(new_state)
-        
-        button.label = "Disable" if new_state else "Enable"
-        button.style = discord.ButtonStyle.danger if new_state else discord.ButtonStyle.success
+        # Clear the dictionary storing all named channels
+        await self.cog.config.guild(interaction.guild).named_channels.set({})
         
         embed = interaction.message.embeds[0]
-        status_msg = f"System {'enabled' if new_state else 'disabled'}"
+        status_msg = "All named channel configurations cleared"
         embed.set_footer(text=_get_admin_footer(interaction, status_msg))
         
         await _update_setup_embed(self.cog, interaction.guild, embed)
-        await interaction.message.edit(embed=embed, view=self)
+        # Use initial_enabled=False since we don't track state here
+        view = SetupView(self.cog, initial_enabled=False) 
+        await interaction.message.edit(embed=embed, view=view)
         
-        await interaction.followup.send(f"System has been **{'enabled' if new_state else 'disabled'}**.", ephemeral=True)
+        await interaction.followup.send("✅ All named channel configurations have been cleared.", ephemeral=True)
 
 # --- MAIN COG CLASS ---
 
 class AfterworkMB(commands.Cog, name="AfterworkMB"): 
     """
-    Manages a persistent button to send a configured JSON embed to a target channel.
+    Manages named channels for sending configured JSON embeds via persistent buttons.
     """
     
     def __init__(self, bot):
@@ -247,8 +260,8 @@ class AfterworkMB(commands.Cog, name="AfterworkMB"):
         self.config.register_guild(
             enabled=False,
             setup_message_id=None,
-            target_channel_id=None,
-            # This is the updated default for brand new guilds
+            # NEW: Stores multiple named channels
+            named_channels={}, 
             json_payload='{"title": "Test Message", "color": 3447003}' 
         )
 
@@ -263,7 +276,7 @@ class AfterworkMB(commands.Cog, name="AfterworkMB"):
     @commands.command(name="afterworkmb") 
     @commands.is_owner()
     async def afterworkmb_command(self, ctx: commands.Context):
-        """Deploys or redeploys the persistent administrative configuration hub for the Message Button."""
+        """Deploys or redeploys the persistent administrative configuration hub for named channels."""
         bot_member = ctx.guild.get_member(self.bot.user.id)
         perms = ctx.channel.permissions_for(bot_member)
         if not perms.send_messages or not perms.manage_messages:
