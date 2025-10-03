@@ -83,10 +83,6 @@ class UserIDModal(discord.ui.Modal, title="Set Webhook User ID"):
         except ValueError:
             return await interaction.response.send_message("❌ **Error:** Input must be a valid numerical ID.", ephemeral=True)
         
-        # --- FIX: REMOVED VALIDATION ---
-        # We no longer check if the bot can "see" the user, as webhooks are not cached users.
-        # We will trust the owner has provided the correct ID.
-        
         await self.cog.config.guild(interaction.guild).webhook_user_id.set(user_id)
         embed = self.original_message.embeds[0]
         embed.set_footer(text=f"User ID updated by {interaction.user.display_name}")
@@ -201,11 +197,30 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if not message.guild or not message.embeds: return
+        # --- DIAGNOSTIC LOGGING ---
+        log.info(f"[AfterworkTV] New message detected in '{message.channel.name}' from '{message.author.name}' (ID: {message.author.id})")
+
+        if not message.guild or not message.embeds:
+            log.info("[AfterworkTV] Message ignored: Not in a guild or no embeds.")
+            return
+            
         data = await self.config.guild(message.guild).all()
         webhook_user_id = data.get('webhook_user_id')
-        if not data.get('enabled') or not webhook_user_id or message.author.id != webhook_user_id:
+
+        log.info(f"[AfterworkTV] Config check: Enabled={data.get('enabled')}, Configured ID={webhook_user_id}")
+
+        if not data.get('enabled'):
+            log.info("[AfterworkTV] Message ignored: System is disabled in config.")
             return
+        if not webhook_user_id:
+            log.info("[AfterworkTV] Message ignored: Webhook User ID is not configured.")
+            return
+        if message.author.id != webhook_user_id:
+            log.info(f"[AfterworkTV] Message ignored: Author ID ({message.author.id}) does not match configured ID ({webhook_user_id}).")
+            return
+        
+        log.info("[AfterworkTV] All initial checks passed. Processing embeds...")
+        # --- END DIAGNOSTIC LOGGING ---
             
         grouping_enabled = data.get('group_season_grabs', True)
         for emb in message.embeds:
@@ -249,7 +264,7 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
                     log.info(f"Suppressing duplicate Sonarr grab for {series_title} S{season_num}.")
                     continue
                 log.info(f"Starting debounce for {series_title} S{season_num}.")
-                task = asyncio.create_task(self._debounce_sonarr_post(self.guild.id, series_title, season_num, emb))
+                task = asyncio.create_task(self._debounce_sonarr_post(message.guild.id, series_title, season_num, emb))
                 self.grab_buffer[buffer_key] = task
 
 async def setup(bot):
