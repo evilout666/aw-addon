@@ -32,11 +32,11 @@ async def _get_admin_roles(guild: discord.Guild):
     return admin_roles
 
 async def _apply_perms_to_category(cog: commands.Cog, guild: discord.Guild, perm_action: callable):
-    """Applies or reverts hiding/showing permissions across all channels in the managed category."""
+    """Applies or reverts hiding/showing permissions across all channels in the managed category.
+    This function only targets Admin/Manager roles for denial/reversion."""
     bot_member = guild.me
     settings = await cog.config.guild(guild).all()
     category_id = settings.get('managed_category_id')
-    allowed_role_ids = settings.get('allowed_roles', [])
     
     if not category_id:
         await _send_owner_dm(cog.bot, f"Permission update failed in **{guild.name}**. Category ID is not configured.")
@@ -55,31 +55,20 @@ async def _apply_perms_to_category(cog: commands.Cog, guild: discord.Guild, perm
     ]
 
     for channel in channels_to_manage:
-        # Action 1: Hide/Revert for Admins
+        # Action: Deny View Channel for Admin Roles
         for role in admin_roles:
             if role < bot_member.top_role:
                 try:
-                    # Perm_action is either _deny_view_channel or _allow_view_channel
-                    await perm_action(channel, role, view_channel=False, reason="Hidden by AfterworkHide")
+                    # perm_action is a lambda defined in SetupView
+                    await perm_action(channel, role, view_channel=False, reason="Managed by AfterworkHide")
                 except discord.Forbidden:
                     log.warning(f"Could not modify admin perms for '{channel.name}'.")
-
-        # Action 2: Show/Revert for Allowed Roles
-        for role_id in allowed_role_ids:
-            role = guild.get_role(role_id)
-            if role and role < bot_member.top_role:
-                try:
-                    # We always want to explicitly grant view_channel=True if enabled
-                    await perm_action(channel, role, view_channel=True, reason="Access granted by AfterworkHide")
-                except discord.Forbidden:
-                    log.warning(f"Could not modify allowed perms for '{channel.name}'.")
 
 
 async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: discord.Embed):
     """Refreshes the configuration data shown in the setup embed."""
     settings = await cog.config.guild(guild).all()
     category_id = settings.get('managed_category_id')
-    allowed_role_ids = settings.get('allowed_roles', [])
     is_enabled = settings.get('enabled', False)
     
     status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
@@ -88,12 +77,6 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     category_channel = guild.get_channel(category_id)
     category_display = f"**{category_channel.name}** (`{category_id}`)" if category_channel else "*Not configured*"
     
-    # Allowed roles list
-    role_list_str = "\n".join(
-        f"- {guild.get_role(r_id).mention} (`{r_id}`)" if guild.get_role(r_id) else f"- *Unknown Role* (`{r_id}`)"
-        for r_id in allowed_role_ids
-    ) or "*None*"
-
     # Channel list preview (shows channels in the managed category)
     channel_list_str = "*None*"
     if category_channel and isinstance(category_channel, discord.CategoryChannel):
@@ -104,7 +87,6 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     embed.add_field(name="System Status", value=status_emoji, inline=False)
     embed.add_field(name="Managed Category", value=category_display, inline=False)
     embed.add_field(name="Channels in Category", value=channel_list_str, inline=False)
-    embed.add_field(name="Allowed Roles (Access Granted)", value=role_list_str, inline=False)
     
     return embed
 
@@ -135,42 +117,6 @@ class CategoryIDModal(discord.ui.Modal, title="Set Managed Category ID"):
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await self.original_message.edit(embed=embed)
 
-class RoleIDModal(discord.ui.Modal, title="Add or Remove an Allowed Role"):
-    role_id_input = discord.ui.TextInput(label="Role ID", style=discord.TextStyle.short, placeholder="Paste the ID of the role to allow or disallow.", required=True, max_length=20)
-
-    def __init__(self, cog: commands.Cog, original_message: discord.Message):
-        super().__init__(timeout=300); self.cog = cog; self.original_message = original_message
-    
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        input_id = self.role_id_input.value.strip()
-        try: role_id = int(input_id)
-        except ValueError: return await interaction.followup.send("❌ **Error:** Input must be a valid role ID.")
-
-        role = interaction.guild.get_role(role_id)
-        if not role: return await interaction.followup.send(f"❌ **Error:** Could not find a Role with the ID `{role_id}`.")
-
-        async with self.cog.config.guild(interaction.guild).allowed_roles() as allowed_roles:
-            if role_id in allowed_roles:
-                allowed_roles.remove(role_id)
-                action = "removed from"
-            else:
-                allowed_roles.append(role_id)
-                action = "added to"
-        
-        # Apply permission changes immediately to all channels in the managed category
-        if await self.cog.config.guild(interaction.guild).enabled():
-            # Since we modify permissions based on the role list, we run the apply function
-            # which will re-evaluate all permissions for the managed category.
-            await _apply_perms_to_category(self.cog, interaction.guild, discord.TextChannel.set_permissions)
-
-        await interaction.followup.send(f"✅ Role {role.mention} has been **{action}** the allowed list.")
-
-        embed = self.original_message.embeds[0]
-        embed.set_footer(text=f"Allowed roles updated by {interaction.user.display_name}")
-        await _update_setup_embed(self.cog, interaction.guild, embed)
-        await self.original_message.edit(embed=embed)
-
 
 # --- VIEW (The Persistent Setup Hub) ---
 
@@ -186,18 +132,12 @@ class SetupView(discord.ui.View):
         if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         await interaction.response.send_modal(CategoryIDModal(self.cog, interaction.message))
 
-    @discord.ui.button(label="Manage Allowed Roles", style=discord.ButtonStyle.primary, custom_id="hide_manage_roles_button", row=0)
-    async def manage_roles_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
-        await interaction.response.send_modal(RoleIDModal(self.cog, interaction.message))
-
-    @discord.ui.button(label="Hide / Show", style=discord.ButtonStyle.primary, custom_id="hide_show_button", row=1) # Renamed button and moved to row 1
+    @discord.ui.button(label="Hide / Show", style=discord.ButtonStyle.primary, custom_id="hide_show_button", row=0)
     async def hide_show_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         
         await interaction.response.defer(thinking=True)
         
-        # Check current visibility of the FIRST channel in the category to determine action
         settings = await self.cog.config.guild(interaction.guild).all()
         category_id = settings.get('managed_category_id')
         category = interaction.guild.get_channel(category_id)
@@ -205,34 +145,25 @@ class SetupView(discord.ui.View):
         if not category or not isinstance(category, discord.CategoryChannel) or not category.channels:
             return await interaction.followup.send("❌ **Error:** No category is configured or the category is empty.", ephemeral=True)
 
-        first_channel = category.channels[0]
+        # Check current state: If the cog is 'enabled', we assume the channels are currently hidden
+        is_currently_enabled = settings.get('enabled')
         
-        # Determine current state: If any admin role is denied view_channel, it is currently "Hidden".
-        # We check the highest bot role for simplicity.
-        admin_role = interaction.guild.me.top_role # Using bot's top role as proxy for admin group
-        current_perms = first_channel.overwrites_for(admin_role)
-        is_currently_hidden = current_perms.view_channel is False
-
-        # Target action is the opposite of the current state
-        new_state = not is_currently_hidden
-        
-        # Choose action function
         perm_action = None
-        if new_state: # SHOWING
-            perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
-                role, view_channel=view_channel, reason=reason
-            )
-            action_verb = "shown"
-        else: # HIDING
+        if is_currently_enabled: 
+            # System is ON, so we are performing the SHOW action (reverting changes)
+            action_verb = "shown (unhidden)"
             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
                 role, overwrite=None, reason=reason
             )
+        else: 
+            # System is OFF, so we are performing the HIDE action (applying denial)
             action_verb = "hidden"
+            perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
+                role, view_channel=False, reason=reason
+            )
         
         # Apply permissions across all channels in the managed category
         await _apply_perms_to_category(self.cog, interaction.guild, perm_action)
-        
-        button.label = "Hide / Show" # Label remains static
         
         embed = interaction.message.embeds[0]
         embed.set_footer(text=f"Channels were {action_verb} by {interaction.user.display_name}")
@@ -241,7 +172,7 @@ class SetupView(discord.ui.View):
         await interaction.followup.send(f"Managed channels have been **{action_verb}** for admins.", ephemeral=True)
 
 
-    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="hide_toggle_button", row=1)
+    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="hide_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         
@@ -252,11 +183,11 @@ class SetupView(discord.ui.View):
         # Choose action based on the new state
         perm_action = None
         
-        if new_state: # Hiding/Enabling
+        if new_state: # Enabling/Hiding (Deny for Admins)
              perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
-                role, view_channel=view_channel, reason=reason
+                role, view_channel=False, reason=reason
             )
-        else: # Reverting/Disabling
+        else: # Disabling/Showing (Revert Admin Denial)
             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
                 role, overwrite=None, reason=reason
             )
@@ -282,7 +213,6 @@ class AfterworkHide(commands.Cog, name="AfterworkHide"):
         self.config.register_guild(
             enabled=False,
             managed_category_id=None,
-            allowed_roles=[],
             setup_message_id=None
         )
 
