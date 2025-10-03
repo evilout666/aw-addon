@@ -58,8 +58,8 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     embed.add_field(name="Target Channel", value=channel_display, inline=False)
     
     embed.add_field(
-        name="JSON Payload Source", 
-        value="Use an Online Editor (e.g., [afterwork.evilout666.com](https://afterwork.evilout666.com)) to generate the message JSON.", 
+        name="Message Payload", 
+        value="Use an Online Editor to generate the message JSON: [afterwork.evilout666.com/embed_builder](http://afterwork.evilout666.com/embed_builder).", 
         inline=False
     )
     
@@ -158,7 +158,7 @@ class JSONPayloadModal(discord.ui.Modal, title="Send Embed Message"):
             embed_msg = self.original_message.embeds[0]
             embed_msg.set_footer(text=_get_admin_footer(interaction, "Embed sent and data updated"))
             await _update_setup_embed(self.cog, interaction.guild, embed_msg)
-            # The view is necessary to update the toggle button state and footer if needed
+            
             view = SetupView(self.cog, initial_enabled=is_enabled)
             await self.original_message.edit(embed=embed_msg, view=view)
             
@@ -180,23 +180,19 @@ class SetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    # NOTE: The _check_owner function has been removed from this class.
-    # The owner check is now done using the standard, async Red function in each button callback.
-
     @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="mb_set_channel_button", row=0)
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Launches the modal to configure the target channel."""
-        # FIX APPLIED HERE: Using the standard, async Red owner check
         if not await self.cog.bot.is_owner(interaction.user): 
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
             
         modal = ChannelIDModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Send Msg", style=discord.ButtonStyle.blurple, custom_id="mb_send_message_button", row=0)
+    # REVERTED: Changed back to standard .primary (Blue/Blurple)
+    @discord.ui.button(label="Send Msg", style=discord.ButtonStyle.primary, custom_id="mb_send_message_button", row=0)
     async def send_message_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Launches the modal to configure and send the JSON embed."""
-        # FIX APPLIED HERE: Using the standard, async Red owner check
         if not await self.cog.bot.is_owner(interaction.user): 
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
             
@@ -207,9 +203,9 @@ class SetupView(discord.ui.View):
         
         await interaction.response.send_modal(modal)
 
+    # REMAINED ON ROW 0: Keeps all three main controls on the top row
     @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="template_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # FIX APPLIED HERE: Using the standard, async Red owner check
         if not await self.cog.bot.is_owner(interaction.user): 
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         
