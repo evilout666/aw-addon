@@ -198,6 +198,16 @@ class SetupView(discord.ui.View):
         modal = JSONPayloadModal(self.cog, interaction.message)
         
         current_json = await self.cog.config.guild(interaction.guild).json_payload()
+        
+        # --- FIX APPLIED HERE: Check for and replace stale saved config value ---
+        OLD_TITLE_PAYLOAD = '{"title": "Afterwork Button Embed", "color": 3447003}'
+        NEW_TITLE_PAYLOAD = '{"title": "Test Message", "color": 3447003}'
+
+        if current_json == OLD_TITLE_PAYLOAD:
+             await self.cog.config.guild(interaction.guild).json_payload.set(NEW_TITLE_PAYLOAD)
+             current_json = NEW_TITLE_PAYLOAD # Use the new value for the modal
+        # --- END FIX ---
+        
         modal.json_input.default = current_json
         
         await interaction.response.send_modal(modal)
@@ -238,7 +248,7 @@ class AfterworkMB(commands.Cog, name="AfterworkMB"):
             enabled=False,
             setup_message_id=None,
             target_channel_id=None,
-            # CHANGE APPLIED HERE: Default JSON updated
+            # This is the updated default for brand new guilds
             json_payload='{"title": "Test Message", "color": 3447003}' 
         )
 
@@ -266,7 +276,6 @@ class AfterworkMB(commands.Cog, name="AfterworkMB"):
                 await old_message.delete()
             except discord.HTTPException: pass
 
-        # CHANGE APPLIED HERE: Title updated
         initial_embed = discord.Embed(title="Send Embed Message", color=discord.Color.blue())
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
         
