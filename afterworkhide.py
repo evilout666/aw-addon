@@ -4,9 +4,15 @@ import logging
 import asyncio
 from datetime import datetime
 
-log = logging.getLogger("red.AfterworkHide")
+log = logging.getLogger("red.AfterworkHD") # Renamed
 
 # --- UTILITY FUNCTIONS ---
+
+# Added utility to generate branded footer (from afterworktv/vc)
+def _get_admin_footer(interaction: discord.Interaction, status_action: str) -> str:
+    """Helper to generate the administrative footer format."""
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return f"e.Network | {status_action} by {interaction.user.display_name} {current_time}"
 
 async def _send_owner_dm(bot, message: str):
     """Sends a critical error message directly to the bot owner."""
@@ -15,7 +21,7 @@ async def _send_owner_dm(bot, message: str):
     if owner:
         try:
             embed = discord.Embed(
-                title="⚠️ Afterwork Hide Error Notification",
+                title="⚠️ Afterwork HD Error Notification", # Renamed
                 description=message,
                 color=discord.Color.red()
             )
@@ -118,7 +124,8 @@ class CategoryIDModal(discord.ui.Modal, title="Set Managed Category ID"):
         await interaction.followup.send(f"✅ Managed Category set to **{category.name}**.", ephemeral=True)
         
         embed = self.original_message.embeds[0]
-        embed.set_footer(text=f"Category updated by {interaction.user.display_name}")
+        # Added administrative footer
+        embed.set_footer(text=_get_admin_footer(interaction, "Category updated"))
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await self.original_message.edit(embed=embed)
 
@@ -136,8 +143,8 @@ class SetupView(discord.ui.View):
 
         # Dynamic Hide/Show Button Logic (Simplified Labels)
         self.toggle_visibility_action.label = "Show" if initial_hidden else "Hide"
-        # Color remains dynamic for visual feedback: Green to show, Red to hide
-        self.toggle_visibility_action.style = discord.ButtonStyle.success if initial_hidden else discord.ButtonStyle.danger
+        # Changed to secondary button style
+        self.toggle_visibility_action.style = discord.ButtonStyle.secondary
 
 
     @discord.ui.button(label="Category ID", style=discord.ButtonStyle.primary, custom_id="hide_set_category_button", row=0)
@@ -175,7 +182,6 @@ class SetupView(discord.ui.View):
                 role, overwrite=None, reason=reason
             )
             new_button_label = "Hide"
-            new_button_style = discord.ButtonStyle.danger
         else: 
             # Action: HIDE (Apply Admin Denial)
             action_verb = "hidden"
@@ -183,17 +189,18 @@ class SetupView(discord.ui.View):
                 role, view_channel=False, reason=reason
             )
             new_button_label = "Show"
-            new_button_style = discord.ButtonStyle.success
         
         # Apply permissions across all channels in the managed category
         await _apply_perms_to_category(self.cog, interaction.guild, perm_action)
         
         # Update button properties to reflect the NEW state
         button.label = new_button_label
-        button.style = new_button_style
+        button.style = discord.ButtonStyle.secondary # Fixed style
         
         embed = interaction.message.embeds[0]
-        embed.set_footer(text=f"Channels were {action_verb} by {interaction.user.display_name}")
+        # Added administrative footer
+        status_msg = f"Channels were {action_verb}"
+        embed.set_footer(text=_get_admin_footer(interaction, status_msg))
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed, view=self)
         
@@ -228,7 +235,9 @@ class SetupView(discord.ui.View):
         button.style = discord.ButtonStyle.danger if new_state else discord.ButtonStyle.success
         
         embed = interaction.message.embeds[0]
-        embed.set_footer(text=f"System status toggled by {interaction.user.display_name}")
+        # Added administrative footer
+        status_msg = f"System {'enabled' if new_state else 'disabled'}"
+        embed.set_footer(text=_get_admin_footer(interaction, status_msg))
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed, view=self)
         
@@ -237,7 +246,7 @@ class SetupView(discord.ui.View):
 
 # --- MAIN COG CLASS ---
 
-class AfterworkHide(commands.Cog, name="AfterworkHide"):
+class AfterworkHD(commands.Cog, name="AfterworkHD"): # Renamed
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=246813579, force_registration=True)
@@ -280,7 +289,7 @@ class AfterworkHide(commands.Cog, name="AfterworkHide"):
         # If the View Channel permission is explicitly denied (False), the channel is hidden.
         return current_perms.view_channel is False
 
-    @commands.command(name="afterworkhide")
+    @commands.command(name="afterworkhd") # Renamed command
     @commands.is_owner()
     async def afterworkhide_command(self, ctx: commands.Context):
         bot_member = ctx.guild.me
@@ -298,7 +307,12 @@ class AfterworkHide(commands.Cog, name="AfterworkHide"):
         initial_enabled = await self.config.guild(ctx.guild).enabled()
         initial_hidden = await self._is_managed_category_hidden(ctx.guild)
 
-        initial_embed = discord.Embed(title="Hidden Channel", description="This tool manages the visibility of all channels within a configured category. Channels are hidden from roles with Administrator or Manage Channels permissions.", color=discord.Color.blue())
+        # Shortened description (removed "all" and "Channels are")
+        description = (
+            "This tool manages the visibility of channels within a configured category. "
+            "Hidden from roles with Administrator or Manage Channels permissions."
+        )
+        initial_embed = discord.Embed(title="Hidden Channel", description=description, color=discord.Color.blue())
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
         
         view = SetupView(self, initial_enabled=initial_enabled, initial_hidden=initial_hidden)
@@ -317,5 +331,5 @@ class AfterworkHide(commands.Cog, name="AfterworkHide"):
         except Exception: pass
 
 async def setup(bot):
-    cog = AfterworkHide(bot)
+    cog = AfterworkHD(bot) # Renamed
     await bot.add_cog(cog)
