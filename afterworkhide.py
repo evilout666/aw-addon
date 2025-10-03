@@ -102,15 +102,16 @@ class CategoryIDModal(discord.ui.Modal, title="Set Managed Category ID"):
         await interaction.response.defer(ephemeral=True, thinking=True)
         input_id = self.category_id_input.value.strip()
         try: category_id = int(input_id)
-        except ValueError: return await interaction.followup.send("❌ **Error:** Input must be a valid Category ID.")
+        except ValueError: return await interaction.followup.send("❌ **Error:** Input must be a valid Category ID.", ephemeral=True)
         
         category = interaction.guild.get_channel(category_id)
         if not category or not isinstance(category, discord.CategoryChannel):
-            return await interaction.followup.send(f"❌ **Error:** Could not find a Category Channel with the ID `{category_id}`.")
+            return await interaction.followup.send(f"❌ **Error:** Could not find a Category Channel with the ID `{category_id}`.", ephemeral=True)
 
         await self.cog.config.guild(interaction.guild).managed_category_id.set(category_id)
         
-        await interaction.followup.send(f"✅ Managed Category set to **{category.name}**.")
+        # Confirmation message is now ephemeral (private)
+        await interaction.followup.send(f"✅ Managed Category set to **{category.name}**.", ephemeral=True)
         
         embed = self.original_message.embeds[0]
         embed.set_footer(text=f"Category updated by {interaction.user.display_name}")
@@ -165,10 +166,12 @@ class SetupView(discord.ui.View):
         # Apply permissions across all channels in the managed category
         await _apply_perms_to_category(self.cog, interaction.guild, perm_action)
         
-        embed = interaction.message.embeds[0]
+        embed = self.original_message.embeds[0]
         embed.set_footer(text=f"Channels were {action_verb} by {interaction.user.display_name}")
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed, view=self)
+        
+        # Confirmation message is now ephemeral (private)
         await interaction.followup.send(f"Managed channels have been **{action_verb}** for admins.", ephemeral=True)
 
 
@@ -202,6 +205,8 @@ class SetupView(discord.ui.View):
         embed.set_footer(text=f"System status toggled by {interaction.user.display_name}")
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed, view=self)
+        
+        # Confirmation message is now ephemeral (private)
         await interaction.followup.send(f"System has been **{'enabled' if new_state else 'disabled'}** and permissions were updated.", ephemeral=True)
 
 # --- MAIN COG CLASS ---
