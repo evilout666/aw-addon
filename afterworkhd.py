@@ -77,7 +77,7 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     settings = await cog.config.guild(guild).all()
     category_id = settings.get('managed_category_id')
     
-    # DETERMINE VISIBILITY STATUS (NEW LOGIC)
+    # DETERMINE VISIBILITY STATUS
     is_hidden = await cog._is_managed_category_hidden(guild) 
 
     if is_hidden:
@@ -96,14 +96,13 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
         channel_list_str = "\n".join(channels) if channels else "*Empty Category*"
 
     embed.clear_fields()
-    # CHANGE APPLIED: Renamed field and used new visibility status
     embed.add_field(name="Visibility Status", value=status_display, inline=False)
     embed.add_field(name="Managed Category", value=category_display, inline=False)
     embed.add_field(name="Channels in Category", value=channel_list_str, inline=False)
     
     return embed
 
-# --- MODALS ---
+# --- MODALS (Unchanged) ---
 
 class CategoryIDModal(discord.ui.Modal, title="Set Managed Category ID"):
     category_id_input = discord.ui.TextInput(label="Category ID", style=discord.TextStyle.short, placeholder="Paste the ID of the channel category to manage.", required=True, max_length=20)
@@ -143,12 +142,11 @@ class CategoryIDModal(discord.ui.Modal, title="Set Managed Category ID"):
 # --- VIEW (The Persistent Setup Hub) ---
 
 class SetupView(discord.ui.View):
-    # REMOVED: initial_enabled parameter
     def __init__(self, cog: commands.Cog, initial_hidden: bool = False):
         super().__init__(timeout=None)
         self.cog = cog
         
-        # CHANGE APPLIED: Dynamic Hide/Show Button Logic based on initial_hidden state
+        # Dynamic Hide/Show Button Logic
         # If currently hidden (True), button should be GREEN "Show" (SUCCESS)
         # If currently visible (False), button should be RED "Hide" (DANGER)
         self.toggle_visibility_action.label = "Show" if initial_hidden else "Hide"
@@ -222,12 +220,11 @@ class SetupView(discord.ui.View):
 
 # --- MAIN COG CLASS ---
 
-class AfterworkHD(commands.Cog, name="AfterworkHD"): # Renamed
+class AfterworkHD(commands.Cog, name="AfterworkHD"): 
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=246813579, force_registration=True)
         self.config.register_guild(
-            # REMOVED: enabled=False
             managed_category_id=None,
             setup_message_id=None
         )
@@ -237,31 +234,47 @@ class AfterworkHD(commands.Cog, name="AfterworkHD"): # Renamed
         for guild_id, data in guilds_data.items():
             if data.get('setup_message_id'):
                 guild = self.bot.get_guild(guild_id)
-                # Removed initial_enabled logic
                 initial_hidden = await self._is_managed_category_hidden(guild) if guild else False
 
                 self.bot.add_view(SetupView(self, 
                                             initial_hidden=initial_hidden), 
                                   message_id=data['setup_message_id'])
     
+    # FIX APPLIED HERE: Rewritten function to check a targetable admin role for explicit denial
     async def _is_managed_category_hidden(self, guild: discord.Guild) -> bool:
-        """Checks the first channel in the managed category to see if it's currently hidden from admins."""
+        """
+        Checks a targetable administrative role in the managed category to see if it's currently hidden.
+        Checks roles with admin permissions that the bot can modify (role < bot.top_role).
+        """
         settings = await self.config.guild(guild).all()
         category_id = settings.get('managed_category_id')
         category = guild.get_channel(category_id)
         
         if not category or not isinstance(category, discord.CategoryChannel) or not category.channels:
-            return False # Cannot determine or not configured
+            return False 
 
-        # Check the highest bot role as a proxy for the administrative group
         first_channel = category.channels[0]
-        admin_role = guild.me.top_role 
-        current_perms = first_channel.overwrites_for(admin_role)
+        
+        # Find an admin role the bot can modify.
+        target_role = None
+        for role in guild.roles:
+            # Check for admin permissions AND if the bot is higher in the hierarchy
+            if (role.permissions.administrator or role.permissions.manage_channels) and role < guild.me.top_role:
+                # We found a suitable role to test the permissions against.
+                target_role = role
+                break
+        
+        if not target_role:
+            # If no targetable admin role is found, the system defaults to "Visible" as there's no way to confirm hidden status.
+            return False
+
+        # Check the explicit overwrite for the found targetable role.
+        current_perms = first_channel.overwrites_for(target_role)
         
         # If the View Channel permission is explicitly denied (False), the channel is hidden.
         return current_perms.view_channel is False
 
-    @commands.command(name="afterworkhd") # Renamed command
+    @commands.command(name="afterworkhd") 
     @commands.is_owner()
     async def afterworkhide_command(self, ctx: commands.Context):
         bot_member = ctx.guild.me
@@ -286,7 +299,6 @@ class AfterworkHD(commands.Cog, name="AfterworkHD"): # Renamed
         initial_embed = discord.Embed(title="Hidden Channel", description=description, color=discord.Color.blue())
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
         
-        # Removed initial_enabled from SetupView call
         view = SetupView(self, initial_hidden=initial_hidden) 
         sent_message = await ctx.send(embed=initial_embed, view=view)
         
