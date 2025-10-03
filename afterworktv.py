@@ -129,7 +129,7 @@ class SetupView(discord.ui.View):
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.response.edit_message(embed=embed, view=self)
 
-    # --- NEW TEMPORARY TEST BUTTON ---
+    # --- TEMPORARY TEST BUTTON ---
     @discord.ui.button(label="Run Test", style=discord.ButtonStyle.grey, custom_id="tv_run_test_button", row=2)
     async def run_test_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user):
@@ -151,12 +151,15 @@ class SetupView(discord.ui.View):
             return await interaction.followup.send("❌ **Test Failed:** Could not find one or both of the configured channels.")
 
         try:
-            last_message = await source_channel.history(limit=1).flatten()
-            if not last_message or not last_message[0].embeds:
+            # FIX: Use list comprehension instead of .flatten()
+            history = [message async for message in source_channel.history(limit=1)]
+            last_message = history[0] if history else None
+            
+            if not last_message or not last_message.embeds:
                 return await interaction.followup.send("❌ **Test Failed:** No recent message with an embed was found in the source channel.")
             
             test_embed = None
-            for emb in last_message[0].embeds:
+            for emb in last_message.embeds:
                 footer = (emb.footer.text or "") if emb.footer else ""
                 if "Sonarr" in footer or "Radarr" in footer:
                     test_embed = emb
