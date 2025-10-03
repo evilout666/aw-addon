@@ -134,7 +134,7 @@ class CategoryIDModal(discord.ui.Modal, title="Set Managed Category ID"):
         embed.set_footer(text=_get_admin_footer(interaction, "Category updated"))
         await _update_setup_embed(self.cog, interaction.guild, embed)
         
-        # Refresh the view to potentially update the dynamic button color
+        # Refresh the view to update the dynamic button color
         initial_hidden = await self.cog._is_managed_category_hidden(interaction.guild)
         view = SetupView(self.cog, initial_hidden=initial_hidden) 
         await self.original_message.edit(embed=embed, view=view)
@@ -189,7 +189,7 @@ class SetupView(discord.ui.View):
             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
                 role, overwrite=None, reason=reason
             )
-            # DYNAMIC COLOR CHANGE: Next state will be visible (GREEN)
+            # DYNAMIC COLOR CHANGE: Next state will be visible (RED/DANGER)
             new_button_label = "Hide"
             new_button_style = discord.ButtonStyle.danger
         else: 
@@ -198,7 +198,7 @@ class SetupView(discord.ui.View):
             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
                 role, view_channel=False, reason=reason
             )
-            # DYNAMIC COLOR CHANGE: Next state will be hidden (RED)
+            # DYNAMIC COLOR CHANGE: Next state will be hidden (GREEN/SUCCESS)
             new_button_label = "Show"
             new_button_style = discord.ButtonStyle.success
         
@@ -219,8 +219,6 @@ class SetupView(discord.ui.View):
         
         # SUCCESS: Send ephemeral (private)
         await interaction.followup.send(f"Managed channels have been **{action_verb}** for admins.", ephemeral=True)
-    
-    # REMOVED: toggle_system method
 
 # --- MAIN COG CLASS ---
 
