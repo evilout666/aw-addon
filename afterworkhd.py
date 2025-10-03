@@ -240,11 +240,11 @@ class AfterworkHD(commands.Cog, name="AfterworkHD"):
                                             initial_hidden=initial_hidden), 
                                   message_id=data['setup_message_id'])
     
-    # FIX APPLIED HERE: Rewritten function to check a targetable admin role for explicit denial
+    # FIX APPLIED: Rewritten function to check all role overwrites for explicit denial on the Administrator permission
     async def _is_managed_category_hidden(self, guild: discord.Guild) -> bool:
         """
-        Checks a targetable administrative role in the managed category to see if it's currently hidden.
-        Checks roles with admin permissions that the bot can modify (role < bot.top_role).
+        Checks if the channel is hidden by looking for an explicit 'View Channel: Deny' 
+        overwrite applied to any role that has the base 'Administrator' permission.
         """
         settings = await self.config.guild(guild).all()
         category_id = settings.get('managed_category_id')
@@ -255,24 +255,25 @@ class AfterworkHD(commands.Cog, name="AfterworkHD"):
 
         first_channel = category.channels[0]
         
-        # Find an admin role the bot can modify.
-        target_role = None
-        for role in guild.roles:
-            # Check for admin permissions AND if the bot is higher in the hierarchy
-            if (role.permissions.administrator or role.permissions.manage_channels) and role < guild.me.top_role:
-                # We found a suitable role to test the permissions against.
-                target_role = role
-                break
-        
-        if not target_role:
-            # If no targetable admin role is found, the system defaults to "Visible" as there's no way to confirm hidden status.
-            return False
-
-        # Check the explicit overwrite for the found targetable role.
-        current_perms = first_channel.overwrites_for(target_role)
-        
-        # If the View Channel permission is explicitly denied (False), the channel is hidden.
-        return current_perms.view_channel is False
+        # Iterate over all permission overwrites applied to the channel
+        for target, overwrite in first_channel.overwrites.items():
+            # Check if the overwrite target is a Role
+            if isinstance(target, discord.Role):
+                
+                # Check if the role has the base Administrator permission.
+                # If a role has this permission, it is considered an admin-level role for the cog's purpose.
+                if target.permissions.administrator:
+                    
+                    # Check if the overwrite explicitly denies view_channel.
+                    if overwrite.view_channel is False:
+                        # If we find an Administrator role that is explicitly denied, the channel is hidden.
+                        return True
+                    
+                    # If an Administrator role is found, but view_channel is NOT denied, the channel is Visible.
+                    # We can stop searching here for this cog's specific logic.
+                    return False
+                    
+        return False
 
     @commands.command(name="afterworkhd") 
     @commands.is_owner()
