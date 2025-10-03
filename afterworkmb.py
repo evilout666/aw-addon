@@ -189,7 +189,6 @@ class SetupView(discord.ui.View):
         modal = ChannelIDModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
 
-    # REVERTED: Changed back to standard .primary (Blue/Blurple)
     @discord.ui.button(label="Send Msg", style=discord.ButtonStyle.primary, custom_id="mb_send_message_button", row=0)
     async def send_message_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Launches the modal to configure and send the JSON embed."""
@@ -203,7 +202,6 @@ class SetupView(discord.ui.View):
         
         await interaction.response.send_modal(modal)
 
-    # REMAINED ON ROW 0: Keeps all three main controls on the top row
     @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="template_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): 
@@ -240,7 +238,8 @@ class AfterworkMB(commands.Cog, name="AfterworkMB"):
             enabled=False,
             setup_message_id=None,
             target_channel_id=None,
-            json_payload='{"title": "Afterwork Button Embed", "color": 3447003}' # Default simple JSON
+            # CHANGE APPLIED HERE: Default JSON updated
+            json_payload='{"title": "Test Message", "color": 3447003}' 
         )
 
     async def initialize(self):
@@ -267,7 +266,8 @@ class AfterworkMB(commands.Cog, name="AfterworkMB"):
                 await old_message.delete()
             except discord.HTTPException: pass
 
-        initial_embed = discord.Embed(title="Send embed message", color=discord.Color.blue())
+        # CHANGE APPLIED HERE: Title updated
+        initial_embed = discord.Embed(title="Send Embed Message", color=discord.Color.blue())
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
         
         initial_enabled = await self.config.guild(ctx.guild).enabled()
