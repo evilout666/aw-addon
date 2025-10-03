@@ -32,17 +32,17 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     is_enabled = settings.get('enabled', False)
 
     dest_channel = cog.bot.get_channel(dest_id)
-    webhook_user = cog.bot.get_user(user_id)
+    # We can't reliably get a user object for a webhook, so we just display the ID
+    webhook_user_display = f"`{user_id}`" if user_id else "*Not configured*"
     
     status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
     dest_name = f"**{dest_channel.name}** (`{dest_id}`)" if dest_channel else "*Not configured*"
-    user_name = f"**{webhook_user.name}** (`{user_id}`)" if webhook_user else "*Not configured*"
     
     embed.description = "Use this panel to manage the Sonarr/Radarr webhook reformatter."
     embed.clear_fields()
     
     embed.add_field(name="System Status", value=status_emoji, inline=True)
-    embed.add_field(name="Webhook User", value=user_name, inline=False)
+    embed.add_field(name="Webhook User ID", value=webhook_user_display, inline=False)
     embed.add_field(name="Destination Channel", value=dest_name, inline=False)
     
     return embed
@@ -81,12 +81,12 @@ class UserIDModal(discord.ui.Modal, title="Set Webhook User ID"):
         try:
             user_id = int(input_id)
         except ValueError:
-            return await interaction.response.send_message("❌ **Error:** Input must be a valid user ID.", ephemeral=True)
+            return await interaction.response.send_message("❌ **Error:** Input must be a valid numerical ID.", ephemeral=True)
         
-        user = self.cog.bot.get_user(user_id)
-        if not user:
-            return await interaction.response.send_message(f"❌ **Error:** I cannot see any user with the ID `{user_id}`.", ephemeral=True)
-
+        # --- FIX: REMOVED VALIDATION ---
+        # We no longer check if the bot can "see" the user, as webhooks are not cached users.
+        # We will trust the owner has provided the correct ID.
+        
         await self.cog.config.guild(interaction.guild).webhook_user_id.set(user_id)
         embed = self.original_message.embeds[0]
         embed.set_footer(text=f"User ID updated by {interaction.user.display_name}")
@@ -249,7 +249,7 @@ class AfterworkTV(commands.Cog, name="AfterworkTV"):
                     log.info(f"Suppressing duplicate Sonarr grab for {series_title} S{season_num}.")
                     continue
                 log.info(f"Starting debounce for {series_title} S{season_num}.")
-                task = asyncio.create_task(self._debounce_sonarr_post(message.guild.id, series_title, season_num, emb))
+                task = asyncio.create_task(self._debounce_sonarr_post(self.guild.id, series_title, season_num, emb))
                 self.grab_buffer[buffer_key] = task
 
 async def setup(bot):
