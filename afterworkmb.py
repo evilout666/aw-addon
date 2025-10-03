@@ -10,7 +10,7 @@ log = logging.getLogger("red.AfterworkMB")
 
 # --- UTILITY FUNCTIONS ---
 
-# FIX: Function handles both Context and Interaction objects
+# FIX RETAINED: Function handles both Context and Interaction objects
 def _get_admin_footer(obj, status_action: str) -> str:
     """Helper to generate the administrative footer format."""
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -57,7 +57,6 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     embed.add_field(name="System Status", value=status_emoji, inline=False)
     embed.add_field(name="Target Channel", value=channel_display, inline=False)
     
-    # CHANGE APPLIED HERE: Display external editor info instead of local preview
     embed.add_field(
         name="JSON Payload Source", 
         value="Use an Online Editor (e.g., [afterwork.evilout666.com](https://afterwork.evilout666.com)) to generate the message JSON.", 
@@ -178,42 +177,41 @@ class SetupView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
         
-        # Standardized Toggle Button Logic
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    def _check_owner(self, interaction: discord.Interaction):
-        """Standardized owner check function."""
-        if interaction.user.id != self.cog.bot.owner_id: 
-            # FIX APPLIED HERE: Send ephemeral response for permission error
-            asyncio.create_task(interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=True))
-            return False
-        return True
+    # NOTE: The _check_owner function has been removed from this class.
+    # The owner check is now done using the standard, async Red function in each button callback.
 
     @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="mb_set_channel_button", row=0)
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Launches the modal to configure the target channel."""
-        if not self._check_owner(interaction): return
+        # FIX APPLIED HERE: Using the standard, async Red owner check
+        if not await self.cog.bot.is_owner(interaction.user): 
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
+            
         modal = ChannelIDModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
 
-    # CHANGE APPLIED HERE: Color changed to Blurple (a non-standard color) and row is 0
     @discord.ui.button(label="Send Msg", style=discord.ButtonStyle.blurple, custom_id="mb_send_message_button", row=0)
     async def send_message_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Launches the modal to configure and send the JSON embed."""
-        if not self._check_owner(interaction): return
+        # FIX APPLIED HERE: Using the standard, async Red owner check
+        if not await self.cog.bot.is_owner(interaction.user): 
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
+            
         modal = JSONPayloadModal(self.cog, interaction.message)
         
-        # Pre-fill modal with saved JSON
         current_json = await self.cog.config.guild(interaction.guild).json_payload()
         modal.json_input.default = current_json
         
         await interaction.response.send_modal(modal)
 
-    # CHANGE APPLIED HERE: Moved to row 0
     @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="template_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self._check_owner(interaction): return
+        # FIX APPLIED HERE: Using the standard, async Red owner check
+        if not await self.cog.bot.is_owner(interaction.user): 
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         
         await interaction.response.defer(ephemeral=True, thinking=True)
         
@@ -231,12 +229,6 @@ class SetupView(discord.ui.View):
         await interaction.message.edit(embed=embed, view=self)
         
         await interaction.followup.send(f"System has been **{'enabled' if new_state else 'disabled'}**.", ephemeral=True)
-
-    # Removed the placeholder button that was on row 1
-    # @discord.ui.button(label="Setting 3 (Secondary)", style=discord.ButtonStyle.secondary, custom_id="template_set_3_button", row=1, disabled=True)
-    # async def setting_button_3(self, interaction: discord.Interaction, button: discord.ui.Button):
-    #     if not self._check_owner(interaction): return
-    #     await interaction.response.send_message("This button is a placeholder for Setting 3.", ephemeral=True)
 
 # --- MAIN COG CLASS ---
 
