@@ -40,7 +40,7 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     """Refreshes the configuration data shown in the setup embed."""
     settings = await cog.config.guild(guild).all()
     named_channels = settings.get('named_channels', {})
-    is_enabled = settings.get('enabled', False) # Kept for structure
+    is_enabled = settings.get('enabled', False)
 
     status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
     
@@ -167,7 +167,6 @@ class NamedMessageSendModal(discord.ui.Modal, title="Send Embed Message"):
             embed_data = json.loads(json_payload)
             if not isinstance(embed_data, dict):
                 raise ValueError("JSON must be an object.")
-            # Always save the last payload globally
             await self.cog.config.guild(interaction.guild).json_payload.set(json_payload) 
         except (json.JSONDecodeError, ValueError):
             return await interaction.followup.send("❌ **Error:** Invalid JSON payload provided.", ephemeral=True)
@@ -191,6 +190,44 @@ class NamedMessageSendModal(discord.ui.Modal, title="Send Embed Message"):
             log.error(f"Error sending embed: {e}", exc_info=True)
             await interaction.followup.send(f"❌ **Error:** Failed to send embed. Bot may lack permissions. ({e.__class__.__name__})", ephemeral=True)
 
+class RemoveChannelModal(discord.ui.Modal, title="Remove Named Channel"):
+    name_input = discord.ui.TextInput(
+        label="Configuration Name to Remove",
+        style=discord.TextStyle.short,
+        placeholder="The name of the channel to remove (e.g., 'general').",
+        required=True,
+        max_length=50,
+    )
+    
+    def __init__(self, cog: commands.Cog, original_message: discord.Message):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.original_message = original_message
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        name = self.name_input.value.strip().lower()
+
+        async with self.cog.config.guild(interaction.guild).named_channels() as channels:
+            if name in channels:
+                del channels[name]
+                success = True
+            else:
+                success = False
+
+        if not success:
+            return await interaction.followup.send(f"❌ **Error:** No channel configuration found with the name `{name}`.", ephemeral=True)
+        
+        # Update the original setup message
+        embed = self.original_message.embeds[0]
+        embed.set_footer(text=_get_admin_footer(interaction, f"Channel '{name}' removed"))
+        await _update_setup_embed(self.cog, interaction.guild, embed)
+        
+        view = SetupView(self.cog, initial_enabled=await self.cog.config.guild(interaction.guild).enabled())
+        await self.original_message.edit(embed=embed, view=view)
+        
+        await interaction.followup.send(f"✅ Channel configuration **{name}** has been removed.", ephemeral=True)
+
 
 # --- VIEW (The Persistent Setup Hub) ---
 
@@ -200,7 +237,9 @@ class SetupView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
         
-        # NOTE: The toggle_system logic/button is removed/replaced by Clear
+        # Initial state setup for the toggle button
+        self.toggle_system.label = "Disable" if initial_enabled else "Enable"
+        self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
     @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="mb_set_channel_button", row=0)
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -219,33 +258,53 @@ class SetupView(discord.ui.View):
             
         modal = NamedMessageSendModal(self.cog, interaction.message)
         
-        # Pre-fill modal with the last saved JSON
         current_json = await self.cog.config.guild(interaction.guild).json_payload()
+        
+        # Ensures the default value is 'Test Message' if the old value is still present
+        OLD_TITLE_PAYLOAD = '{"title": "Afterwork Button Embed", "color": 3447003}'
+        NEW_TITLE_PAYLOAD = '{"title": "Test Message", "color": 3447003}'
+        if current_json == OLD_TITLE_PAYLOAD:
+             current_json = NEW_TITLE_PAYLOAD 
+        
         modal.json_input.default = current_json
         
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Clear", style=discord.ButtonStyle.danger, custom_id="mb_clear_channels", row=0)
-    async def clear_channel_configs(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Clears all saved named channel configurations."""
+    # NEW BUTTON: Remove (Grey/Secondary color)
+    @discord.ui.button(label="Remove", style=discord.ButtonStyle.secondary, custom_id="mb_remove_channel", row=0)
+    async def remove_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Launches modal to remove a named channel configuration."""
+        if not await self.cog.bot.is_owner(interaction.user): 
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
+        
+        modal = RemoveChannelModal(self.cog, interaction.message)
+        await interaction.response.send_modal(modal)
+
+
+    # NEW BUTTON: Enable/Disable (Red/Danger or Green/Success colors)
+    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="mb_toggle_system", row=0)
+    async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Toggles the system status (Enabled/Disabled)."""
         if not await self.cog.bot.is_owner(interaction.user): 
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         
         await interaction.response.defer(ephemeral=True, thinking=True)
         
-        # Clear the dictionary storing all named channels
-        await self.cog.config.guild(interaction.guild).named_channels.set({})
+        new_state = not (await self.cog.config.guild(interaction.guild).enabled())
+        await self.cog.config.guild(interaction.guild).enabled.set(new_state)
+        
+        button.label = "Disable" if new_state else "Enable"
+        button.style = discord.ButtonStyle.danger if new_state else discord.ButtonStyle.success
         
         embed = interaction.message.embeds[0]
-        status_msg = "All named channel configurations cleared"
+        status_msg = f"System {'enabled' if new_state else 'disabled'}"
         embed.set_footer(text=_get_admin_footer(interaction, status_msg))
         
         await _update_setup_embed(self.cog, interaction.guild, embed)
-        # Use initial_enabled=False since we don't track state here
-        view = SetupView(self.cog, initial_enabled=False) 
-        await interaction.message.edit(embed=embed, view=view)
+        await interaction.message.edit(embed=embed, view=self) 
         
-        await interaction.followup.send("✅ All named channel configurations have been cleared.", ephemeral=True)
+        await interaction.followup.send(f"System has been **{'enabled' if new_state else 'disabled'}**.", ephemeral=True)
+
 
 # --- MAIN COG CLASS ---
 
@@ -260,7 +319,6 @@ class AfterworkMB(commands.Cog, name="AfterworkMB"):
         self.config.register_guild(
             enabled=False,
             setup_message_id=None,
-            # NEW: Stores multiple named channels
             named_channels={}, 
             json_payload='{"title": "Test Message", "color": 3447003}' 
         )
