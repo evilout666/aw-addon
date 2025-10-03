@@ -6,53 +6,51 @@ from datetime import datetime
 
 log = logging.getLogger("red.AfterWorkVC")
 
-# --- UTILITY FUNCTION: Send Error DM to Owner ---
+# --- UTILITY FUNCTIONS ---
 
-async def _send_owner_dm(bot: commands.Bot, guild: discord.Guild, error_message: str, error_type: str = "Error"):
-    """Sends a detailed DM to the bot owner regarding a critical guild-specific error."""
-    owner_id = (await bot.get_application_info()).owner.id
+async def _send_owner_dm(bot, message: str):
+    """Sends a critical error message directly to the bot owner."""
+    owner_id = bot.owner_id
     owner = bot.get_user(owner_id)
     if owner:
-        dm_content = (
-            f"❌ **{error_type} in AfterWorkVC Cog**\n\n"
-            f"**Guild:** {guild.name} (`{guild.id}`)\n"
-            f"**Timestamp:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
-            f"**Details:** {error_message}"
-        )
         try:
-            await owner.send(dm_content)
-        except Exception:
-            log.exception(f"Failed to send owner DM for error in {guild.name}.")
-    else:
-        log.error(f"Owner not found to send error DM for {guild.type}: {error_message}")
-
-
-# --- UTILITY FUNCTION: Update Config Embed ---
+            embed = discord.Embed(
+                title="⚠️ Afterwork VC Error Notification",
+                description=message,
+                color=discord.Color.red()
+            )
+            await owner.send(embed=embed)
+        except discord.Forbidden:
+            log.error(f"Failed to DM owner ({owner.name}). Owner must enable DMs.")
 
 async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: discord.Embed):
     """Refreshes the configuration data shown in the setup embed."""
     settings = await cog.config.guild(guild).all()
     source_id = settings.get('source_id')
     source_channel = cog.bot.get_channel(source_id)
+    is_enabled = settings.get('enabled', False)
     
-    # Logic: System is considered Active if a source ID is present and the channel is found.
-    status_is_active = source_id is not None and source_channel is not None
-    status_emoji = "🟢 Active" if status_is_active else "🔴 Inactive"
-    
+    # Logic for System Status display
+    status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
     source_name = f"**{source_channel.name}** (`{source_id}`)" if source_channel else "*Not yet configured*"
     
-    embed.clear_fields()
+    # Update embed description/fields
     embed.description = (
         "Use this panel to verify the system status and update the Source Voice Channel ID.\n\n"
         "**Instructions:** Copy the desired Voice Channel ID, then click the button below to paste it."
     )
     
+    embed.clear_fields()
+    
+    # Field 1: System Status (Restored)
     embed.add_field(name="System Status", value=status_emoji, inline=True)
+    
+    # Field 2: Source VC Target
     embed.add_field(name="Source VC (Join Channel)", value=source_name, inline=False)
     
     return embed
 
-# --- MODAL (The Fill-in Box) ---
+# --- MODAL (The Fill-in Box for ID Input) ---
 
 class ChannelIDModal(discord.ui.Modal, title="Set Source Voice Channel"):
     """
@@ -89,41 +87,70 @@ class ChannelIDModal(discord.ui.Modal, title="Set Source Voice Channel"):
                 ephemeral=True
             )
         
-        # --- Save configuration ---
+        # --- Save configuration: Set ID and ensure system is enabled ---
         await self.cog.config.guild(interaction.guild).source_id.set(channel_id)
+        await self.cog.config.guild(interaction.guild).enabled.set(True) # Force enable on new configuration
         
         # Update the original setup message to reflect the change
         embed = self.original_message.embeds[0]
+        
+        # Update Footer with accountability info
         embed.set_footer(text=f"Last updated by {interaction.user.display_name} | {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
         await _update_setup_embed(self.cog, interaction.guild, embed)
         
-        # Edit the message to show success (suppresses the ephemeral follow-up)
-        await interaction.response.edit_message(embed=embed)
+        # Edit message to update the embed and dynamically update the button state
+        view = SetupView(self.cog, initial_enabled=True)
+        await interaction.response.edit_message(embed=embed, view=view)
+        
+        # NO explicit success message is sent to the channel or ephemerally.
 
-
-# --- VIEW (The Persistent Setup Button) ---
+# --- VIEW (The Persistent Setup Hub) ---
 
 class SetupView(discord.ui.View):
     """
-    A persistent view containing the button that launches the Modal.
+    A persistent view containing the button that launches the Modal and the Toggle Button.
     """
-    def __init__(self, cog: commands.Cog):
+    def __init__(self, cog: commands.Cog, initial_enabled: bool = False):
         super().__init__(timeout=None)
         self.cog = cog
+        
+        # Dynamically set the initial state of the toggle button
+        self.toggle_system.label = "Deactivate System" if initial_enabled else "Activate System"
+        self.toggle_system.style = discord.ButtonStyle.success if initial_enabled else discord.ButtonStyle.secondary
 
     @discord.ui.button(label="Set/Override Channel ID", style=discord.ButtonStyle.primary, custom_id="vc_set_button")
     async def set_source_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """
-        Button callback that sends the ChannelIDModal to the user.
-        """
+        """Button callback that sends the ChannelIDModal to the user."""
         if not await self.cog.bot.is_owner(interaction.user):
             return await interaction.response.send_message("Only the bot owner can use this setup tool.", ephemeral=True)
 
         modal = ChannelIDModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
 
+    @discord.ui.button(label="Toggle System State", style=discord.ButtonStyle.secondary, custom_id="vc_toggle_button", row=1)
+    async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Toggles the 'enabled' state of the listener."""
+        if not await self.cog.bot.is_owner(interaction.user):
+            return await interaction.response.send_message("Only the bot owner can use this toggle.", ephemeral=True)
+        
+        new_state = not (await self.cog.config.guild(interaction.guild).enabled())
+        await self.cog.config.guild(interaction.guild).enabled.set(new_state)
+        
+        # Update button appearance and label
+        button.label = "Deactivate System" if new_state else "Activate System"
+        button.style = discord.ButtonStyle.success if new_state else discord.ButtonStyle.secondary
+
+        # Update the embed status field
+        embed = interaction.message.embeds[0]
+        embed.set_footer(text=f"Status toggled by {interaction.user.display_name} | {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        await _update_setup_embed(self.cog, interaction.guild, embed)
+
+        await interaction.response.edit_message(embed=embed, view=self)
+
+
 # --- VOICE CHANNEL CONTROLS (Room Owner View) ---
+# NOTE: VoiceChannelButtons class remains unchanged.
 
 class VoiceChannelButtons(discord.ui.View):
     """
@@ -286,15 +313,21 @@ class AfterWorkVC(commands.Cog, name="AfterWorkVC"):
         self.config = Config.get_conf(self, identifier=123456789, force_registration=True)
         
         self.config.register_guild(
-            enabled=True,
+            enabled=False, # System starts disabled until configured/enabled
             source_id=None,
-            room_channels={}, # {voice_channel_id: {"owner_id": id}}
-            setup_message_id=None, # Stored ID for the configuration hub message
+            setup_message_id=None, # For storing the ID of the persistent hub message
+            room_channels={} # {voice_channel_id: {"owner_id": id}}
         )
 
     async def initialize(self):
         """Asynchronous initialization method."""
-        pass
+        # This is where we would typically re-add the view persistence hook
+        guilds_data = await self.config.all_guilds()
+        for guild_id, data in guilds_data.items():
+            if data.get('setup_message_id'):
+                # We need to pass the initial state for the button to load correctly
+                initial_enabled = data.get('enabled', False)
+                self.bot.add_view(SetupView(self, initial_enabled=initial_enabled), message_id=data['setup_message_id'])
 
     def cog_unload(self):
         log.info("AfterWorkVC unloaded.")
@@ -302,62 +335,72 @@ class AfterWorkVC(commands.Cog, name="AfterWorkVC"):
     # --- SINGLE COMMAND: [p]afterworkvc ---
 
     @commands.command(name="afterworkvc")
-    @commands.is_owner()
+    @commands.is_owner() # Restricted to bot owner
     async def afterworkvc_command(self, ctx: commands.Context):
         """
         Posts the permanent interactive configuration hub for Afterwork Voice Control.
         
         Run this command once in your dedicated settings channel. The message will be pinned.
         """
-        bot_perms = ctx.channel.permissions_for(ctx.guild.me)
-        
-        if not bot_perms.send_messages or not bot_perms.manage_messages:
-            # DM owner if required permissions are missing
-            await _send_owner_dm(
-                ctx.bot, ctx.guild,
-                f"I need both 'Send Messages' and 'Manage Messages' permissions "
-                f"in channel #{ctx.channel.name} (`{ctx.channel.id}`) to manage the setup hub.",
-                error_type="Missing Permissions"
+        # --- 0. Permission Pre-check ---
+        bot_member = ctx.guild.get_member(self.bot.user.id)
+        perms = ctx.channel.permissions_for(bot_member)
+        if not perms.send_messages or not perms.manage_messages:
+            await _send_owner_dm(self.bot, 
+                f"Configuration failed in **{ctx.guild.name}** (`{ctx.guild.id}`). "
+                f"I need **Send Messages** and **Manage Messages** permissions in channel **#{ctx.channel.name}** to post and pin the hub."
             )
-            return
-
+            return await ctx.send("❌ **Error:** Missing permissions. Check bot owner DMs for details.", delete_after=15)
+        
+        # --- 1. Cleanup Old Hub ---
         settings = await self.config.guild(ctx.guild).all()
-        old_message_id = settings.get("setup_message_id")
-
-        # --- Cleanup: Check for and delete old setup hub message ---
+        old_message_id = settings.get('setup_message_id')
+        
         if old_message_id:
             try:
                 old_message = await ctx.channel.fetch_message(old_message_id)
                 await old_message.delete()
-                log.info(f"Deleted old setup message (ID: {old_message_id}) in {ctx.guild.name}.")
             except discord.NotFound:
-                log.info(f"Old setup message (ID: {old_message_id}) not found, proceeding with new post.")
-            except discord.Forbidden:
-                log.error(f"Forbidden to delete old setup hub in {ctx.channel.name}.")
-            finally:
-                await self.config.guild(ctx.guild).setup_message_id.set(None)
-        
-        # --- Post New Hub ---
+                log.warning(f"Old setup message ID {old_message_id} found in config but message not found in channel. Proceeding with new post.")
+            except discord.HTTPException:
+                log.error(f"Failed to delete old setup message {old_message_id}. Ignoring.")
+
+
+        # --- 2. Post New Hub ---
         initial_embed = discord.Embed(
-            title="Voice Channel",
+            title="Voice Channel", # Final title as requested
             color=discord.Color.blue()
         )
         
+        # Populate initial status and description
         initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
         
+        # Initialize view with current enabled state
+        initial_enabled = await self.config.guild(ctx.guild).enabled()
+        view = SetupView(self, initial_enabled=initial_enabled)
+
+        sent_message = await ctx.send(embed=initial_embed, view=view)
+        
+        # --- 3. Pin and Store ID ---
+        await sent_message.pin(reason="Afterwork VC Configuration Hub.")
+        await self.config.guild(ctx.guild).setup_message_id.set(sent_message.id)
+        
+        # --- 4. Clean up Command Invocation and Pin Notification ---
+        await ctx.message.delete()
+        
+        # Delete the automatic "X pinned a message" system message
+        await asyncio.sleep(1) 
         try:
-            sent_message = await ctx.send(embed=initial_embed, view=SetupView(self))
-            await sent_message.pin(reason="Afterwork VC Configuration Hub for owner access.")
-            
-            await self.config.guild(ctx.guild).setup_message_id.set(sent_message.id)
-            await ctx.message.delete()
-            
-        except discord.Forbidden as e:
-            await _send_owner_dm(
-                ctx.bot, ctx.guild,
-                f"Failed to post or pin the hub in #{ctx.channel.name}. Details: {e}",
-                error_type="Setup Failure"
-            )
+            # Fetch the channel history for the latest system message (the pin notification)
+            async for message in ctx.channel.history(limit=5):
+                if message.type == discord.MessageType.pins_add and message.author.id == self.bot.user.id:
+                    await message.delete()
+                    break
+        except discord.Forbidden:
+            log.warning("Failed to delete pin confirmation system message. Missing Manage Messages permission?")
+        except Exception as e:
+            log.error(f"Error deleting pin confirmation message: {e}")
+
 
     # --- LISTENERS (Core Functionality) ---
     
@@ -366,7 +409,7 @@ class AfterWorkVC(commands.Cog, name="AfterWorkVC"):
         guild = member.guild
         config = await self.config.guild(guild).all()
 
-        if not config.get("source_id"):
+        if not config.get("enabled"):
             return
 
         source_id = config.get("source_id")
@@ -399,23 +442,16 @@ class AfterWorkVC(commands.Cog, name="AfterWorkVC"):
                 embed.add_field(name="Controls", value="Use buttons to manage members and privacy.", inline=False)
                 
                 view = await VoiceChannelButtons.create(self, new_voice_channel)
+                # Post the control panel in the newly created VC
                 await new_voice_channel.send(content=member.mention, embed=embed, view=view)
 
             except asyncio.TimeoutError:
-                await _send_owner_dm(
-                    member.bot, guild,
-                    f"User {member.display_name} joined the source VC but was **not moved** by the external cog (Timeout: 15s). "
-                    "The voice control panel was not posted.",
-                    error_type="External Cog Failure"
+                message = (
+                    f"User **{member.display_name}** joined the Source VC but was not moved within 15 seconds. "
+                    "This usually means the external AutoRoom cog failed to create the channel."
                 )
-            except Exception as e:
-                await _send_owner_dm(
-                    member.bot, guild,
-                    f"Unexpected error creating control panel for {member.display_name}: {e}",
-                    error_type="Runtime Error"
-                )
-
-        pass
+                log.warning(message)
+                await _send_owner_dm(self.bot, f"Guild: {guild.name} (ID: {guild.id})\n{message}")
 
 
 # --- RED SETUP FUNCTION ---
@@ -423,5 +459,6 @@ class AfterWorkVC(commands.Cog, name="AfterWorkVC"):
 async def setup(bot):
     """The function Red uses to load the cog."""
     cog = AfterWorkVC(bot)
+    # The setup view must be added asynchronously via initialize() to ensure persistence on restart
     await cog.initialize()
     await bot.add_cog(cog)
