@@ -102,15 +102,18 @@ class CategoryIDModal(discord.ui.Modal, title="Set Managed Category ID"):
         await interaction.response.defer(ephemeral=True, thinking=True)
         input_id = self.category_id_input.value.strip()
         try: category_id = int(input_id)
-        except ValueError: return await interaction.followup.send("❌ **Error:** Input must be a valid Category ID.", ephemeral=True)
+        except ValueError: 
+            # ERROR: Send publicly
+            return await interaction.followup.send("❌ **Error:** Input must be a valid Category ID.")
         
         category = interaction.guild.get_channel(category_id)
         if not category or not isinstance(category, discord.CategoryChannel):
-            return await interaction.followup.send(f"❌ **Error:** Could not find a Category Channel with the ID `{category_id}`.", ephemeral=True)
+            # ERROR: Send publicly
+            return await interaction.followup.send(f"❌ **Error:** Could not find a Category Channel with the ID `{category_id}`.")
 
         await self.cog.config.guild(interaction.guild).managed_category_id.set(category_id)
         
-        # Confirmation message is now ephemeral (private)
+        # SUCCESS: Send ephemeral (private)
         await interaction.followup.send(f"✅ Managed Category set to **{category.name}**.", ephemeral=True)
         
         embed = self.original_message.embeds[0]
@@ -130,12 +133,16 @@ class SetupView(discord.ui.View):
 
     @discord.ui.button(label="Category ID", style=discord.ButtonStyle.primary, custom_id="hide_set_category_button", row=0)
     async def set_category_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
+        if not await self.cog.bot.is_owner(interaction.user): 
+            # ERROR: Send publicly
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=False) 
         await interaction.response.send_modal(CategoryIDModal(self.cog, interaction.message))
 
     @discord.ui.button(label="Hide / Show", style=discord.ButtonStyle.primary, custom_id="hide_show_button", row=0)
     async def hide_show_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
+        if not await self.cog.bot.is_owner(interaction.user): 
+            # ERROR: Send publicly
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
         
         await interaction.response.defer(thinking=True)
         
@@ -144,26 +151,23 @@ class SetupView(discord.ui.View):
         category = interaction.guild.get_channel(category_id)
         
         if not category or not isinstance(category, discord.CategoryChannel) or not category.channels:
-            return await interaction.followup.send("❌ **Error:** No category is configured or the category is empty.", ephemeral=True)
+            # ERROR: Send publicly
+            return await interaction.followup.send("❌ **Error:** No category is configured or the category is empty.")
 
-        # Check current state: If the cog is 'enabled', we assume the channels are currently hidden
         is_currently_enabled = settings.get('enabled')
         
         perm_action = None
         if is_currently_enabled: 
-            # System is ON, so we are performing the SHOW action (reverting changes)
             action_verb = "shown (unhidden)"
             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
                 role, overwrite=None, reason=reason
             )
         else: 
-            # System is OFF, so we are performing the HIDE action (applying denial)
             action_verb = "hidden"
             perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(
                 role, view_channel=False, reason=reason
             )
         
-        # Apply permissions across all channels in the managed category
         await _apply_perms_to_category(self.cog, interaction.guild, perm_action)
         
         embed = self.original_message.embeds[0]
@@ -171,19 +175,20 @@ class SetupView(discord.ui.View):
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed, view=self)
         
-        # Confirmation message is now ephemeral (private)
+        # SUCCESS: Send ephemeral (private)
         await interaction.followup.send(f"Managed channels have been **{action_verb}** for admins.", ephemeral=True)
 
 
     @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="hide_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
+        if not await self.cog.bot.is_owner(interaction.user): 
+            # ERROR: Send publicly
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
         
         await interaction.response.defer(thinking=True)
         new_state = not (await self.cog.config.guild(interaction.guild).enabled())
         await self.cog.config.guild(interaction.guild).enabled.set(new_state)
         
-        # Choose action based on the new state
         perm_action = None
         
         if new_state: # Enabling/Hiding (Deny for Admins)
@@ -195,7 +200,6 @@ class SetupView(discord.ui.View):
                 role, overwrite=None, reason=reason
             )
 
-        # Apply permissions across all channels in the managed category
         await _apply_perms_to_category(self.cog, interaction.guild, perm_action)
         
         button.label = "Disable" if new_state else "Enable"
@@ -206,7 +210,7 @@ class SetupView(discord.ui.View):
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed, view=self)
         
-        # Confirmation message is now ephemeral (private)
+        # SUCCESS: Send ephemeral (private)
         await interaction.followup.send(f"System has been **{'enabled' if new_state else 'disabled'}** and permissions were updated.", ephemeral=True)
 
 # --- MAIN COG CLASS ---
