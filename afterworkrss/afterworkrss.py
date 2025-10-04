@@ -61,9 +61,9 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
 
 # --- MODALS ---
 
-class AddFeedModal(discord.ui.Modal, title="Add New RSS Feed"):
+class AddFeedModal(discord.ui.Modal, title="Add New RSS Feed (Start from NOW)"):
     feed_name_input = discord.ui.TextInput(
-        label="Feed Name (e.g., 'GitHub News')",
+        label="Feed Name (e.g., 'Ark News')",
         style=discord.TextStyle.short,
         placeholder="A unique name to reference this feed.",
         required=True,
@@ -79,14 +79,17 @@ class AddFeedModal(discord.ui.Modal, title="Add New RSS Feed"):
     rss_url_input = discord.ui.TextInput(
         label="RSS/Atom Feed URL",
         style=discord.TextStyle.short,
-        placeholder="e.g., https://github.com/red-cog/feed.xml",
+        placeholder="e.g., https://store.steampowered.com/feeds/news/app/...",
         required=True,
     )
     
-    def __init__(self, cog: commands.Cog, original_message: discord.Message):
+    def __init__(self, cog: commands.Cog, original_message: discord.Message, backfill: bool = False):
         super().__init__(timeout=300)
         self.cog = cog
         self.original_message = original_message
+        self.backfill = backfill
+        if backfill:
+             self.title = "Add RSS Feed (Post All History)"
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -106,8 +109,8 @@ class AddFeedModal(discord.ui.Modal, title="Add New RSS Feed"):
         if not channel.permissions_for(interaction.guild.me).send_messages:
              return await interaction.followup.send(f"❌ **Error:** I do not have permission to post messages in {channel.mention}.", ephemeral=True)
 
-        # Attempt to initialize and validate feed
-        new_feed_data = await self.cog._add_feed_to_config(interaction.guild, feed_name, channel_id, rss_url)
+        # Attempt to initialize and validate feed, passing the backfill flag
+        new_feed_data = await self.cog._add_feed_to_config(interaction.guild, feed_name, channel_id, rss_url, backfill=self.backfill)
 
         if isinstance(new_feed_data, str):
              return await interaction.followup.send(f"❌ **Error:** {new_feed_data}", ephemeral=True)
@@ -124,7 +127,9 @@ class AddFeedModal(discord.ui.Modal, title="Add New RSS Feed"):
         view = SetupView(self.cog, initial_enabled=await self.cog.config.guild(interaction.guild).enabled())
         await self.original_message.edit(embed=embed, view=view)
         
-        await interaction.followup.send(f"✅ Feed **{feed_name}** added for {channel.mention}.", ephemeral=True)
+        mode = "and will start posting historical entries." if self.backfill else "and is now caught up."
+        await interaction.followup.send(f"✅ Feed **{feed_name}** added for {channel.mention} {mode}", ephemeral=True)
+
 
 # --- VIEW (The Persistent Setup Hub) ---
 
@@ -142,13 +147,19 @@ class SetupView(discord.ui.View):
             await interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=False)
         return is_owner
 
-    @discord.ui.button(label="Add Feed", style=discord.ButtonStyle.primary, custom_id="rss_add_feed_button", row=0)
+    @discord.ui.button(label="Add New (Start NOW)", style=discord.ButtonStyle.primary, custom_id="rss_add_new_button", row=0)
     async def add_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
-        modal = AddFeedModal(self.cog, interaction.message)
+        modal = AddFeedModal(self.cog, interaction.message, backfill=False)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Remove Feed (Command)", style=discord.ButtonStyle.secondary, custom_id="rss_remove_feed_button", row=0)
+    @discord.ui.button(label="Add and Backfill", style=discord.ButtonStyle.primary, custom_id="rss_add_backfill_button", row=0)
+    async def add_and_backfill_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_owner(interaction): return
+        modal = AddFeedModal(self.cog, interaction.message, backfill=True)
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(label="Remove", style=discord.ButtonStyle.danger, custom_id="rss_remove_feed_button", row=1)
     async def remove_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
         await interaction.response.send_message("Please use a command like `[p]rssremove <name>` to delete feeds.", ephemeral=True)
@@ -249,7 +260,7 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
 
     # --- Core RSS Logic (Simplified) ---
     
-    async def _add_feed_to_config(self, guild: discord.Guild, feed_name: str, channel_id: int, url: str) -> Union[dict, str]:
+    async def _add_feed_to_config(self, guild: discord.Guild, feed_name: str, channel_id: int, url: str, backfill: bool = False) -> Union[dict, str]:
         """Validates, fetches initial post, and creates the new feed entry dict."""
         feeds_list = await self.config.guild(guild).feeds()
         if any(f['name'] == feed_name for f in feeds_list):
@@ -266,14 +277,18 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
         
         entry_time = self._time_tag_validation(entry)
         
+        # If backfill is TRUE, set last_time to None (or 0) to force posting all found entries.
+        # Otherwise, set it to the newest post time to skip old posts.
+        last_time = entry_time if not backfill else 0
+        
         new_feed_data = {
             "name": feed_name,
             "channel_id": channel_id,
             "url": url,
             "last_title": entry.get("title", ""),
             "last_link": entry.get("link", ""),
-            "last_time": entry_time,
-            "template": "**$title**\n$link",
+            "last_time": last_time,
+            "template": "**$title**\n$summary_detail_plaintext\n$link",
             "is_embed": True
         }
         return new_feed_data
@@ -346,26 +361,64 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
         feedparser_obj = await self._fetch_feedparser_object(feed['url'])
         if not feedparser_obj.entries: return
 
-        # Get the newest entry and sort it to compare
-        entry = feedparser_obj.entries[0]
-        
-        current_title = entry.get("title", "")
-        current_link = entry.get("link", "")
-        current_time = self._time_tag_validation(entry)
-        
-        # Comparison Logic: Check if the post is genuinely new
-        is_new_entry = False
-        if current_time and feed['last_time'] and current_time > feed['last_time']:
-            is_new_entry = True
-        elif feed['last_title'] != current_title or feed['last_link'] != current_link:
-            is_new_entry = True
+        # Iterate through all entries in reverse (newest first)
+        entries_to_post = []
+        for entry in feedparser_obj.entries:
+            current_title = entry.get("title", "")
+            current_link = entry.get("link", "")
+            current_time = self._time_tag_validation(entry)
 
-        if is_new_entry:
+            # Comparison Logic: Check if the post is newer than the last recorded time
+            is_new_entry = False
+            
+            # If last_time is 0 (backfill mode), we post everything, but update the timestamp
+            if feed['last_time'] == 0:
+                is_new_entry = True
+            
+            # Standard mode check: Is the current time newer than the last recorded time?
+            elif current_time and feed['last_time'] and current_time > feed['last_time']:
+                is_new_entry = True
+                
+            # Fallback check (for feeds with unstable timestamps)
+            elif feed['last_title'] != current_title or feed['last_link'] != current_link:
+                 if feed['last_time'] == 0: # Only post if in backfill mode
+                    is_new_entry = True
+
+
+            if is_new_entry:
+                entries_to_post.append((entry, current_title, current_link, current_time))
+            
+            # Once we hit a post older than the last recorded time, stop.
+            if feed['last_time'] != 0 and current_time and current_time <= feed['last_time']:
+                break
+        
+        if not entries_to_post: return
+
+        # Reverse to post oldest first (chronological order)
+        entries_to_post.reverse()
+        
+        newest_post_time = 0
+        newest_post_title = ""
+        newest_post_link = ""
+
+        for entry, current_title, current_link, current_time in entries_to_post:
+            
+            # Update newest post time/link/title tracking
+            if current_time and current_time > newest_post_time:
+                newest_post_time = current_time
+                newest_post_title = current_title
+                newest_post_link = current_link
+            
             # Post the new content
-            message = feed['template'].replace('$title', current_title).replace('$link', current_link)
+            # Use BeautifulSoup to safely get the text from the summary, which Steam uses heavily
+            summary_html = entry.get("summary_detail", {}).get("value", "") or entry.get("content", [{}])[0].get("value", "")
+            summary_text = BeautifulSoup(summary_html, 'html.parser').get_text()
+
+            # Substitute placeholder for Steam feed text
+            message = feed['template'].replace('$title', current_title).replace('$summary_detail_plaintext', summary_text).replace('$link', current_link)
             
             if feed['is_embed']:
-                embed = discord.Embed(title=current_title, description=current_link, color=discord.Color.blue())
+                embed = discord.Embed(title=current_title, description=summary_text, url=current_link, color=discord.Color.blue())
                 if current_time: embed.timestamp = datetime.fromtimestamp(current_time)
                 try: await channel.send(embed=embed)
                 except discord.Forbidden: return
@@ -373,8 +426,10 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
                 try: await channel.send(f"{message}")
                 except discord.Forbidden: return
 
-            # Update the last checked status in config
-            await self._update_last_scraped(None, feed['name'], guild.id, current_title, current_link, current_time)
+        # After posting the entire backlog/new batch, update the config to the LATEST post time found.
+        if newest_post_time > 0 and newest_post_time > feed['last_time']:
+            await self._update_last_scraped(None, feed['name'], guild.id, newest_post_title, newest_post_link, newest_post_time)
+
 
 async def setup(bot):
     cog = AfterworkRSS(bot) 
