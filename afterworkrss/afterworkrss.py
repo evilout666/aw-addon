@@ -174,6 +174,7 @@ class RemoveFeedModal(discord.ui.Modal, title="Remove RSS Feed"):
         await interaction.followup.send(f"✅ Feed **{feed_name}** removed.", ephemeral=True)
 
 class ManageFilterModal(discord.ui.Modal, title="Content Filter Management"):
+    # FIX APPLIED: Removed 'disabled=True' to fix TypeError
     filter_instruction = discord.ui.TextInput(
         label="Active Filters and Commands",
         style=discord.TextStyle.long,
@@ -183,7 +184,6 @@ class ManageFilterModal(discord.ui.Modal, title="Content Filter Management"):
                 "[p]afterworkrss filters remove <phrase>",
         required=False,
         max_length=1000,
-        disabled=True
     )
     
     def __init__(self, cog: commands.Cog, original_message: discord.Message, current_filters: List[str]):
@@ -282,7 +282,7 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
             enabled=False,
             setup_message_id=None,
             feeds=[], 
-            content_filters=[], # Initialized empty, user adds required filters
+            content_filters=[], 
         )
         self._read_feeds_loop = None
         self._headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0"}
@@ -540,69 +540,3 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
             # Once we hit a post older than the last recorded time, stop.
             if feed['last_time'] != 0 and current_time and current_time <= feed['last_time']:
                 break
-        
-        if not entries_to_post: return
-
-        # Reverse to post oldest first (chronological order)
-        entries_to_post.reverse()
-        
-        newest_post_time = 0
-        newest_post_title = ""
-        newest_post_link = ""
-        
-        # --- Constants for size limiting ---
-        DESCRIPTION_LIMIT = 4096 
-        
-        for entry, current_title, current_link, current_time in entries_to_post:
-            
-            # Update newest post time/link/title tracking
-            if current_time and current_time > newest_post_time:
-                newest_post_time = current_time
-                newest_post_title = current_title
-                newest_post_link = current_link
-            
-            # Get and clean post summary text
-            summary_html = entry.get("summary_detail", {}).get("value", "") or entry.get("content", [{}])[0].get("value", "")
-            summary_text = BeautifulSoup(summary_html, 'html.parser').get_text()
-
-            # 1. Apply Content Filtering (Iteratively remove unwanted sections)
-            for phrase in content_filters:
-                # Case-insensitive check to find the start of the unwanted section
-                if phrase.lower() in summary_text.lower():
-                    # Split at the first occurrence and take only the content before it
-                    # This relies on the original text remaining ordered.
-                    summary_text = summary_text.lower().split(phrase.lower(), 1)[0].strip()
-                    # After splitting, update case of the remaining text to look better
-                    summary_text = summary_text[0].upper() + summary_text[1:] if summary_text else ""
-                    break # Stop searching for phrases once one is found and removed
-            
-            # 2. Apply Content Truncation Fix
-            if len(summary_text) > DESCRIPTION_LIMIT:
-                # Truncate and add a message about the link
-                summary_text = summary_text[:DESCRIPTION_LIMIT - 60] + f"\n\n[... Read Full Post Here]({current_link})"
-
-            # Substitute placeholder for Steam feed text
-            message = feed['template'].replace('$title', current_title).replace('$summary_detail_plaintext', summary_text).replace('$link', current_link)
-            
-            if feed['is_embed']:
-                embed = discord.Embed(title=current_title, description=summary_text, url=current_link, color=discord.Color.blue())
-                if current_time: embed.timestamp = datetime.fromtimestamp(current_time)
-                try: await channel.send(embed=embed)
-                except discord.Forbidden: 
-                    log.error(f"Failed to post embed for {feed['name']} in {guild.name}. Missing permissions.")
-                    return
-            else:
-                try: await channel.send(f"{message}")
-                except discord.Forbidden: 
-                    log.error(f"Failed to post text message for {feed['name']} in {guild.name}. Missing permissions.")
-                    return
-
-        # After posting the entire backlog/new batch, update the config to the LATEST post time found.
-        if newest_post_time > 0 and newest_post_time > feed['last_time']:
-            await self._update_last_scraped(None, feed['name'], guild.id, newest_post_title, newest_post_link, newest_post_time)
-
-
-async def setup(bot):
-    cog = AfterworkRSS(bot) 
-    await cog.initialize()
-    await bot.add_cog(cog)
