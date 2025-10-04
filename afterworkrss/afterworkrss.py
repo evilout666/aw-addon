@@ -1,5 +1,5 @@
 import discord
-from redbot.core import commands, Config
+from redbot.core import commands, Config, checks # <-- FIX APPLIED HERE
 import logging
 import asyncio
 from datetime import datetime
@@ -7,6 +7,7 @@ from typing import Optional, Union, List
 from urllib.parse import urlparse
 import aiohttp
 import feedparser
+from bs4 import BeautifulSoup
 import time
 from types import SimpleNamespace
 
@@ -147,11 +148,10 @@ class SetupView(discord.ui.View):
         modal = AddFeedModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Remove Feed (Command)", style=discord.ButtonStyle.secondary, custom_id="rss_remove_feed_button", row=0, disabled=True)
+    @discord.ui.button(label="Remove Feed (Command)", style=discord.ButtonStyle.secondary, custom_id="rss_remove_feed_button", row=0)
     async def remove_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Note: Removal is typically done via a command (e.g., [p]rss remove) in this cog for simplicity."""
         if not self._check_owner(interaction): return
-        await interaction.response.send_message("Please use a command like `[p]rss remove <name>` as a full UI is too complex for this version.", ephemeral=True)
+        await interaction.response.send_message("Please use a command like `[p]rssremove <name>` to delete feeds.", ephemeral=True)
 
     @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.secondary, custom_id="rss_toggle_button", row=1)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -232,7 +232,7 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
                     break
         except Exception: pass
 
-    @commands.command()
+    @commands.command(name="rssremove")
     @checks.mod_or_permissions(manage_guild=True)
     async def rssremove(self, ctx, feed_name: str):
         """Removes an RSS feed by its configured name."""
@@ -284,12 +284,15 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
             timeout = aiohttp.ClientTimeout(total=15)
             async with aiohttp.ClientSession(headers=self._headers, timeout=timeout) as session:
                 async with session.get(url) as resp:
-                    resp.raise_for_status()
+                    # Use BeautifulSoup for initial check, as it will handle some non-standard feeds better
                     html = await resp.read()
             
             feedparser_obj = feedparser.parse(html)
             if feedparser_obj.bozo:
-                raise ValueError(f"Bozo feed: {feedparser_obj.bozo_exception}")
+                # Use bs4 to give a slightly clearer error message
+                soup = BeautifulSoup(html, 'html.parser')
+                error_msg = f"Bozo feed: {feedparser_obj.bozo_exception}. HTML Snippet: {soup.prettify()[:200]}..."
+                raise ValueError(error_msg)
                 
             return feedparser_obj
         except Exception as e:
