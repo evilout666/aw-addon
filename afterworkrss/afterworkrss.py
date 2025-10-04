@@ -1,5 +1,5 @@
 import discord
-from redbot.core import commands, Config, checks 
+from redbot.core import commands, Config, checks
 import logging
 import asyncio
 from datetime import datetime
@@ -452,7 +452,9 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
                     break
             
             if len(summary_text) > DESCRIPTION_LIMIT:
-                summary_text = summary_text[:DESCRIPTION_LIMIT - 60] + f"\n\n[... Read Full Post Here]({current_link})"
+                suffix = f"\n\n[... Read Full Post Here]({current_link})"
+                truncate_at = DESCRIPTION_LIMIT - len(suffix)
+                summary_text = summary_text[:truncate_at] + suffix
             
             if feed['is_embed']:
                 embed = discord.Embed(title=current_title, description=summary_text, url=current_link, color=discord.Color.blue())
