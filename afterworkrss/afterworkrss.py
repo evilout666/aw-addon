@@ -61,7 +61,7 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
 
 # --- MODALS ---
 
-class AddFeedModal(discord.ui.Modal, title="Add New RSS Feed (Start from NOW)"):
+class AddFeedModal(discord.ui.Modal, title="Add New RSS Feed"):
     feed_name_input = discord.ui.TextInput(
         label="Feed Name (e.g., 'Ark News')",
         style=discord.TextStyle.short,
@@ -130,6 +130,46 @@ class AddFeedModal(discord.ui.Modal, title="Add New RSS Feed (Start from NOW)"):
         mode = "and will start posting historical entries." if self.backfill else "and is now caught up."
         await interaction.followup.send(f"✅ Feed **{feed_name}** added for {channel.mention} {mode}", ephemeral=True)
 
+class RemoveFeedModal(discord.ui.Modal, title="Remove RSS Feed"):
+    feed_name_input = discord.ui.TextInput(
+        label="Feed Name to Remove",
+        style=discord.TextStyle.short,
+        placeholder="The name of the feed (e.g., 'Ark News').",
+        required=True,
+        max_length=50,
+    )
+    
+    def __init__(self, cog: commands.Cog, original_message: discord.Message):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.original_message = original_message
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        feed_name = self.feed_name_input.value.strip().lower()
+
+        async with self.cog.config.guild(interaction.guild).feeds() as feeds:
+            initial_len = len(feeds)
+            feeds[:] = [f for f in feeds if f['name'] != feed_name]
+            
+            if len(feeds) < initial_len:
+                success = True
+            else:
+                success = False
+
+        if not success:
+            return await interaction.followup.send(f"❌ **Error:** Feed **{feed_name}** not found.", ephemeral=True)
+        
+        # Update the original setup message
+        embed = self.original_message.embeds[0]
+        embed.set_footer(text=_get_admin_footer(interaction, f"Feed '{feed_name}' removed"))
+        await _update_setup_embed(self.cog, interaction.guild, embed)
+        
+        view = SetupView(self.cog, initial_enabled=await self.cog.config.guild(interaction.guild).enabled())
+        await self.original_message.edit(embed=embed, view=view)
+        
+        await interaction.followup.send(f"✅ Feed **{feed_name}** removed.", ephemeral=True)
+
 
 # --- VIEW (The Persistent Setup Hub) ---
 
@@ -159,12 +199,15 @@ class SetupView(discord.ui.View):
         modal = AddFeedModal(self.cog, interaction.message, backfill=True)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Remove", style=discord.ButtonStyle.danger, custom_id="rss_remove_feed_button", row=1)
-    async def remove_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    # RENAMED to "Remove", style=danger, moved to row 0
+    @discord.ui.button(label="Remove", style=discord.ButtonStyle.danger, custom_id="rss_remove_feed_button", row=0)
+    async def remove_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
-        await interaction.response.send_message("Please use a command like `[p]rssremove <name>` to delete feeds.", ephemeral=True)
+        modal = RemoveFeedModal(self.cog, interaction.message)
+        await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.secondary, custom_id="rss_toggle_button", row=1)
+    # TOGGLE STATUS button moved to row 0
+    @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.secondary, custom_id="rss_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
         
@@ -246,7 +289,7 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
     @commands.command(name="rssremove")
     @checks.mod_or_permissions(manage_guild=True)
     async def rssremove(self, ctx, feed_name: str):
-        """Removes an RSS feed by its configured name."""
+        """Removes an RSS feed by its configured name (Console fallback)."""
         feed_name = feed_name.lower()
         
         async with self.config.guild(ctx.guild).feeds() as feeds:
@@ -277,8 +320,7 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
         
         entry_time = self._time_tag_validation(entry)
         
-        # If backfill is TRUE, set last_time to None (or 0) to force posting all found entries.
-        # Otherwise, set it to the newest post time to skip old posts.
+        # If backfill is TRUE, set last_time to 0 to force posting all found entries.
         last_time = entry_time if not backfill else 0
         
         new_feed_data = {
