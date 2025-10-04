@@ -1,5 +1,5 @@
 import discord
-from redbot.core import commands, Config, checks 
+from redbot.core import commands, Config, checks
 import logging
 import asyncio
 from datetime import datetime
@@ -112,17 +112,14 @@ class AddFeedModal(discord.ui.Modal, title="Add New RSS Feed"):
         if not channel.permissions_for(interaction.guild.me).send_messages:
              return await interaction.followup.send(f"❌ **Error:** I do not have permission to post messages in {channel.mention}.", ephemeral=True)
 
-        # Attempt to initialize and validate feed, passing the backfill flag
         new_feed_data = await self.cog._add_feed_to_config(interaction.guild, feed_name, channel_id, rss_url, backfill=self.backfill)
 
         if isinstance(new_feed_data, str):
              return await interaction.followup.send(f"❌ **Error:** {new_feed_data}", ephemeral=True)
 
-        # Save the new configuration
         async with self.cog.config.guild(interaction.guild).feeds() as feeds:
             feeds.append(new_feed_data)
 
-        # Update the original setup message to reflect the change
         embed = self.original_message.embeds[0]
         embed.set_footer(text=_get_admin_footer(interaction, "Feed added"))
         await _update_setup_embed(self.cog, interaction.guild, embed)
@@ -163,7 +160,6 @@ class RemoveFeedModal(discord.ui.Modal, title="Remove RSS Feed"):
         if not success:
             return await interaction.followup.send(f"❌ **Error:** Feed **{feed_name}** not found.", ephemeral=True)
         
-        # Update the original setup message
         embed = self.original_message.embeds[0]
         embed.set_footer(text=_get_admin_footer(interaction, f"Feed '{feed_name}' removed"))
         await _update_setup_embed(self.cog, interaction.guild, embed)
@@ -174,16 +170,10 @@ class RemoveFeedModal(discord.ui.Modal, title="Remove RSS Feed"):
         await interaction.followup.send(f"✅ Feed **{feed_name}** removed.", ephemeral=True)
 
 class ManageFilterModal(discord.ui.Modal, title="Content Filter Management"):
-    # FIX APPLIED: Removed 'disabled=True' to fix TypeError
     filter_instruction = discord.ui.TextInput(
         label="Active Filters and Commands",
         style=discord.TextStyle.long,
-        default="Use the following commands in chat to manage filters:\n\n"
-                "[p]afterworkrss filters list\n"
-                "[p]afterworkrss filters add <phrase>\n"
-                "[p]afterworkrss filters remove <phrase>",
-        required=False,
-        max_length=1000,
+        required=False
     )
     
     def __init__(self, cog: commands.Cog, original_message: discord.Message, current_filters: List[str]):
@@ -203,10 +193,8 @@ class ManageFilterModal(discord.ui.Modal, title="Content Filter Management"):
             f"[p]afterworkrss filters remove \"<phrase>\""
         )
         self.filter_instruction.default = full_message
-        self.add_item(self.filter_instruction)
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Submission doesn't do anything but acknowledge the user read the instructions
         await interaction.response.send_message("Filters are managed using the commands listed above.", ephemeral=True)
 
 
@@ -302,12 +290,12 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
     def cog_unload(self):
         if self._read_feeds_loop: self._read_feeds_loop.cancel()
 
-    # --- BRANDED TOP-LEVEL COMMAND GROUP ---
-    @commands.group(invoke_without_command=False, name="afterworkrss")
+    @commands.group(name="afterworkrss")
     @commands.is_owner()
-    async def afterworkrss(self, ctx):
+    async def afterworkrss(self, ctx: commands.Context):
         """The Afterwork RSS Configuration Panel."""
-        # The 'deploy' subcommand handles showing the panel
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help()
 
     @afterworkrss.command(name="deploy")
     @commands.is_owner()
@@ -353,8 +341,6 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
             else:
                 await ctx.send(f"❌ Feed **{feed_name}** not found.")
 
-    # --- FILTER MANAGEMENT COMMAND GROUP ---
-    
     @afterworkrss.group(name="filters")
     @checks.mod_or_permissions(manage_guild=True)
     async def afterworkrss_filters(self, ctx: commands.Context):
@@ -419,12 +405,8 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
             log.error(f"Failed to fetch initial feed {url}: {e}", exc_info=True)
             return "Failed to fetch or parse the RSS feed URL. Check if it is a valid RSS/Atom link."
 
-        # Use the newest entry or fallback to feed metadata
         entry = feedparser_obj.entries[0] if feedparser_obj.entries else feedparser_obj.feed
-        
         entry_time = self._time_tag_validation(entry)
-        
-        # If backfill is TRUE, set last_time to 0 to force posting all found entries.
         last_time = entry_time if not backfill else 0
         
         new_feed_data = {
@@ -445,12 +427,10 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
             timeout = aiohttp.ClientTimeout(total=15)
             async with aiohttp.ClientSession(headers=self._headers, timeout=timeout) as session:
                 async with session.get(url) as resp:
-                    # Use BeautifulSoup for initial check, as it will handle some non-standard feeds better
                     html = await resp.read()
             
             feedparser_obj = feedparser.parse(html)
             if feedparser_obj.bozo:
-                # Use bs4 to give a slightly clearer error message
                 soup = BeautifulSoup(html, 'html.parser')
                 error_msg = f"Bozo feed: {feedparser_obj.bozo_exception}. HTML Snippet: {soup.prettify()[:200]}..."
                 raise ValueError(error_msg)
@@ -466,7 +446,7 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
             return int(time.mktime(entry_time))
         return None
         
-    async def _update_last_scraped(self, feeds_list: List[dict], feed_name: str, guild_id: int, title: str, link: str, entry_time: int):
+    async def _update_last_scraped(self, feed_name: str, guild_id: int, title: str, link: str, entry_time: int):
         """Updates the last successful check time/content in the config."""
         async with self.config.guild(guild_id).feeds() as feeds:
              for feed in feeds:
@@ -482,9 +462,8 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
         """The core background loop that processes all feeds."""
         await self.bot.wait_until_red_ready()
         
-        # Simple loop structure: check all feeds sequentially every 5 minutes (300 seconds)
         while True:
-            await asyncio.sleep(300) # Wait interval
+            await asyncio.sleep(300) 
             
             for guild_id, guild_data in (await self.config.all_guilds()).items():
                 if not guild_data.get('enabled'): continue
@@ -502,41 +481,75 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
     async def check_and_post_feed(self, guild: discord.Guild, feed: dict):
         channel = self.bot.get_channel(feed['channel_id'])
         if not channel or not channel.permissions_for(guild.me).send_messages: 
-            return # Skip feed if channel is unavailable or missing permissions
+            return
 
         feedparser_obj = await self._fetch_feedparser_object(feed['url'])
         if not feedparser_obj.entries: return
 
-        # Get active filters
         content_filters = await self.config.guild(guild).content_filters()
         
-        # Iterate through all entries in reverse (newest first)
         entries_to_post = []
         for entry in feedparser_obj.entries:
             current_title = entry.get("title", "")
             current_link = entry.get("link", "")
             current_time = self._time_tag_validation(entry)
 
-            # Comparison Logic: Check if the post is newer than the last recorded time
             is_new_entry = False
-            
-            # If last_time is 0 (backfill mode), we post everything.
             if feed['last_time'] == 0:
                 is_new_entry = True
-            
-            # Standard mode check: Is the current time newer than the last recorded time?
             elif current_time and feed['last_time'] and current_time > feed['last_time']:
                 is_new_entry = True
-                
-            # Fallback check (for feeds with unstable timestamps)
             elif feed['last_title'] != current_title or feed['last_link'] != current_link:
-                 if feed['last_time'] == 0: # Only post if in backfill mode
+                 if feed['last_time'] == 0: 
                     is_new_entry = True
-
 
             if is_new_entry:
                 entries_to_post.append((entry, current_title, current_link, current_time))
             
-            # Once we hit a post older than the last recorded time, stop.
             if feed['last_time'] != 0 and current_time and current_time <= feed['last_time']:
                 break
+        
+        if not entries_to_post: return
+
+        entries_to_post.reverse()
+        
+        newest_post_time, newest_post_title, newest_post_link = 0, "", ""
+        
+        DESCRIPTION_LIMIT = 4096 
+        
+        for entry, current_title, current_link, current_time in entries_to_post:
+            
+            if current_time and current_time > newest_post_time:
+                newest_post_time, newest_post_title, newest_post_link = current_time, current_title, current_link
+            
+            summary_html = entry.get("summary_detail", {}).get("value", "") or entry.get("content", [{}])[0].get("value", "")
+            summary_text = BeautifulSoup(summary_html, 'html.parser').get_text()
+
+            for phrase in content_filters:
+                if phrase.lower() in summary_text.lower():
+                    summary_text = summary_text.lower().split(phrase.lower(), 1)[0].strip()
+                    summary_text = summary_text[0].upper() + summary_text[1:] if summary_text else ""
+                    break
+            
+            if len(summary_text) > DESCRIPTION_LIMIT:
+                summary_text = summary_text[:DESCRIPTION_LIMIT - 60] + f"\n\n[... Read Full Post Here]({current_link})"
+
+            message = feed['template'].replace('$title', current_title).replace('$summary_detail_plaintext', summary_text).replace('$link', current_link)
+            
+            if feed['is_embed']:
+                embed = discord.Embed(title=current_title, description=summary_text, url=current_link, color=discord.Color.blue())
+                if current_time: embed.timestamp = datetime.fromtimestamp(current_time)
+                try: await channel.send(embed=embed)
+                except discord.Forbidden: return
+            else:
+                try: await channel.send(f"{message}")
+                except discord.Forbidden: return
+
+        if newest_post_time > 0 and newest_post_time > feed['last_time']:
+            await self._update_last_scraped(feed['name'], guild.id, newest_post_title, newest_post_link, newest_post_time)
+
+
+async def setup(bot):
+    cog = AfterworkRSS(bot) 
+    await cog.initialize()
+    await bot.add_cog(cog)
