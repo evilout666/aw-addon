@@ -36,6 +36,7 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     settings = await cog.config.guild(guild).all()
     feeds_list = settings.get('feeds', [])
     is_enabled = settings.get('enabled', False)
+    content_filters = settings.get('content_filters', [])
 
     status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
     
@@ -47,6 +48,7 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
         feed_display.append(f"• **{feed['name']}** -> {channel_name} ({feed['url'][:30]}...)")
     
     feed_display_str = "\n".join(feed_display) if feed_display else "*No feeds configured.*"
+    filter_count = len(content_filters)
     
     embed.description = (
         "Configures RSS feeds to post updates in a specified channel. The core loop runs every 5 minutes."
@@ -55,6 +57,7 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
     
     embed.add_field(name="System Status", value=status_emoji, inline=True)
     embed.add_field(name="Total Feeds Configured", value=str(len(feeds_list)), inline=True)
+    embed.add_field(name="Active Filters", value=str(filter_count), inline=True)
     embed.add_field(name="Configured Feeds", value=feed_display_str, inline=False)
     
     return embed
@@ -170,6 +173,42 @@ class RemoveFeedModal(discord.ui.Modal, title="Remove RSS Feed"):
         
         await interaction.followup.send(f"✅ Feed **{feed_name}** removed.", ephemeral=True)
 
+class ManageFilterModal(discord.ui.Modal, title="Content Filter Management"):
+    filter_instruction = discord.ui.TextInput(
+        label="Active Filters and Commands",
+        style=discord.TextStyle.long,
+        default="Use the following commands in chat to manage filters:\n\n"
+                "[p]afterworkrss filters list\n"
+                "[p]afterworkrss filters add <phrase>\n"
+                "[p]afterworkrss filters remove <phrase>",
+        required=False,
+        max_length=1000,
+        disabled=True
+    )
+    
+    def __init__(self, cog: commands.Cog, original_message: discord.Message, current_filters: List[str]):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.original_message = original_message
+        
+        filter_list_display = "No active filters."
+        if current_filters:
+            filter_list_display = "\n".join([f"- {f}" for f in current_filters])
+        
+        full_message = (
+            f"Current Filters:\n{filter_list_display}\n\n"
+            f"Use the commands below in chat to modify this list (replace [p] with your prefix):\n"
+            f"[p]afterworkrss filters list\n"
+            f"[p]afterworkrss filters add \"<phrase>\"\n"
+            f"[p]afterworkrss filters remove \"<phrase>\""
+        )
+        self.filter_instruction.default = full_message
+        self.add_item(self.filter_instruction)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        # Submission doesn't do anything but acknowledge the user read the instructions
+        await interaction.response.send_message("Filters are managed using the commands listed above.", ephemeral=True)
+
 
 # --- VIEW (The Persistent Setup Hub) ---
 
@@ -199,14 +238,12 @@ class SetupView(discord.ui.View):
         modal = AddFeedModal(self.cog, interaction.message, backfill=True)
         await interaction.response.send_modal(modal)
 
-    # RENAMED to "Remove", style=danger, moved to row 0
     @discord.ui.button(label="Remove", style=discord.ButtonStyle.danger, custom_id="rss_remove_feed_button", row=0)
     async def remove_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
         modal = RemoveFeedModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
 
-    # TOGGLE STATUS button moved to row 0
     @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.secondary, custom_id="rss_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
@@ -228,6 +265,13 @@ class SetupView(discord.ui.View):
         
         await interaction.followup.send(f"System has been **{'enabled' if new_state else 'disabled'}**.", ephemeral=True)
 
+    @discord.ui.button(label="Manage Filters", style=discord.ButtonStyle.secondary, custom_id="rss_manage_filters_button", row=1)
+    async def manage_filters_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_owner(interaction): return
+        current_filters = await self.cog.config.guild(interaction.guild).content_filters()
+        modal = ManageFilterModal(self.cog, interaction.message, current_filters)
+        await interaction.response.send_modal(modal)
+
 # --- MAIN COG CLASS (Adapted for simplicity) ---
 
 class AfterworkRSS(commands.Cog, name="AfterworkRSS"): 
@@ -237,7 +281,8 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
         self.config.register_guild(
             enabled=False,
             setup_message_id=None,
-            feeds=[], # List of dictionaries, each describing a feed
+            feeds=[], 
+            content_filters=[], # Initialized empty, user adds required filters
         )
         self._read_feeds_loop = None
         self._headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0"}
@@ -257,10 +302,17 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
     def cog_unload(self):
         if self._read_feeds_loop: self._read_feeds_loop.cancel()
 
-    @commands.command(name="afterworkrss") 
+    # --- BRANDED TOP-LEVEL COMMAND GROUP ---
+    @commands.group(invoke_without_command=False, name="afterworkrss")
     @commands.is_owner()
-    async def afterworkrss_command(self, ctx: commands.Context):
-        """Deploys or redeploys the persistent administrative configuration hub for RSS feeds."""
+    async def afterworkrss(self, ctx):
+        """The Afterwork RSS Configuration Panel."""
+        # The 'deploy' subcommand handles showing the panel
+
+    @afterworkrss.command(name="deploy")
+    @commands.is_owner()
+    async def afterworkrss_deploy(self, ctx: commands.Context):
+        """Deploys or redeploys the persistent administrative configuration hub."""
         old_message_id = await self.config.guild(ctx.guild).setup_message_id()
         if old_message_id:
             try: await ctx.channel.fetch_message(old_message_id).delete()
@@ -286,10 +338,10 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
                     break
         except Exception: pass
 
-    @commands.command(name="rssremove")
+    @afterworkrss.command(name="removefeed")
     @checks.mod_or_permissions(manage_guild=True)
-    async def rssremove(self, ctx, feed_name: str):
-        """Removes an RSS feed by its configured name (Console fallback)."""
+    async def afterworkrss_removefeed(self, ctx, feed_name: str):
+        """Removes an RSS feed by its configured name (Command line utility)."""
         feed_name = feed_name.lower()
         
         async with self.config.guild(ctx.guild).feeds() as feeds:
@@ -300,6 +352,58 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
                 await ctx.send(f"✅ Feed **{feed_name}** removed.")
             else:
                 await ctx.send(f"❌ Feed **{feed_name}** not found.")
+
+    # --- FILTER MANAGEMENT COMMAND GROUP ---
+    
+    @afterworkrss.group(name="filters")
+    @checks.mod_or_permissions(manage_guild=True)
+    async def afterworkrss_filters(self, ctx: commands.Context):
+        """Manages the list of phrases removed from Steam news post bodies."""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help()
+
+    @afterworkrss_filters.command(name="list")
+    async def afterworkrss_filters_list(self, ctx: commands.Context):
+        """Lists all active content filters."""
+        filters = await self.config.guild(ctx.guild).content_filters()
+        if not filters:
+            return await ctx.send("No content filters are currently active.")
+        
+        msg = "Active Content Filters (Phrases that trigger section removal):\n"
+        for i, f in enumerate(filters, 1):
+            msg += f"{i}. {f}\n"
+        
+        await ctx.send(box(msg, lang="ini"))
+
+    @afterworkrss_filters.command(name="add")
+    async def afterworkrss_filters_add(self, ctx: commands.Context, *, phrase: str):
+        """Adds a phrase that will be removed from the body of posts."""
+        phrase = phrase.strip()
+        if not phrase:
+            return await ctx.send("Please provide a phrase to filter.")
+            
+        async with self.config.guild(ctx.guild).content_filters() as filters:
+            # Case-insensitive check to avoid duplicates with different casing
+            if phrase.lower() in [f.lower() for f in filters]:
+                return await ctx.send(f"⚠️ Filter **{phrase}** is already in the list.")
+
+            filters.append(phrase)
+            await ctx.send(f"✅ Filter added: **{phrase}**. All content following this phrase will be removed from future posts.")
+
+    @afterworkrss_filters.command(name="remove")
+    async def afterworkrss_filters_remove(self, ctx: commands.Context, *, phrase: str):
+        """Removes a phrase from the content filter list."""
+        phrase = phrase.strip()
+        
+        async with self.config.guild(ctx.guild).content_filters() as filters:
+            try:
+                # Find the filter using case-insensitive matching
+                found_filter = next(f for f in filters if f.lower() == phrase.lower())
+                filters.remove(found_filter)
+                await ctx.send(f"✅ Filter removed: **{found_filter}**.")
+            except StopIteration:
+                await ctx.send(f"⚠️ Filter **{phrase}** was not found in the list.")
+
 
     # --- Core RSS Logic (Simplified) ---
     
@@ -403,6 +507,9 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
         feedparser_obj = await self._fetch_feedparser_object(feed['url'])
         if not feedparser_obj.entries: return
 
+        # Get active filters
+        content_filters = await self.config.guild(guild).content_filters()
+        
         # Iterate through all entries in reverse (newest first)
         entries_to_post = []
         for entry in feedparser_obj.entries:
@@ -413,7 +520,7 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
             # Comparison Logic: Check if the post is newer than the last recorded time
             is_new_entry = False
             
-            # If last_time is 0 (backfill mode), we post everything, but update the timestamp
+            # If last_time is 0 (backfill mode), we post everything.
             if feed['last_time'] == 0:
                 is_new_entry = True
             
@@ -442,7 +549,10 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
         newest_post_time = 0
         newest_post_title = ""
         newest_post_link = ""
-
+        
+        # --- Constants for size limiting ---
+        DESCRIPTION_LIMIT = 4096 
+        
         for entry, current_title, current_link, current_time in entries_to_post:
             
             # Update newest post time/link/title tracking
@@ -451,10 +561,25 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
                 newest_post_title = current_title
                 newest_post_link = current_link
             
-            # Post the new content
-            # Use BeautifulSoup to safely get the text from the summary, which Steam uses heavily
+            # Get and clean post summary text
             summary_html = entry.get("summary_detail", {}).get("value", "") or entry.get("content", [{}])[0].get("value", "")
             summary_text = BeautifulSoup(summary_html, 'html.parser').get_text()
+
+            # 1. Apply Content Filtering (Iteratively remove unwanted sections)
+            for phrase in content_filters:
+                # Case-insensitive check to find the start of the unwanted section
+                if phrase.lower() in summary_text.lower():
+                    # Split at the first occurrence and take only the content before it
+                    # This relies on the original text remaining ordered.
+                    summary_text = summary_text.lower().split(phrase.lower(), 1)[0].strip()
+                    # After splitting, update case of the remaining text to look better
+                    summary_text = summary_text[0].upper() + summary_text[1:] if summary_text else ""
+                    break # Stop searching for phrases once one is found and removed
+            
+            # 2. Apply Content Truncation Fix
+            if len(summary_text) > DESCRIPTION_LIMIT:
+                # Truncate and add a message about the link
+                summary_text = summary_text[:DESCRIPTION_LIMIT - 60] + f"\n\n[... Read Full Post Here]({current_link})"
 
             # Substitute placeholder for Steam feed text
             message = feed['template'].replace('$title', current_title).replace('$summary_detail_plaintext', summary_text).replace('$link', current_link)
@@ -463,10 +588,14 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
                 embed = discord.Embed(title=current_title, description=summary_text, url=current_link, color=discord.Color.blue())
                 if current_time: embed.timestamp = datetime.fromtimestamp(current_time)
                 try: await channel.send(embed=embed)
-                except discord.Forbidden: return
+                except discord.Forbidden: 
+                    log.error(f"Failed to post embed for {feed['name']} in {guild.name}. Missing permissions.")
+                    return
             else:
                 try: await channel.send(f"{message}")
-                except discord.Forbidden: return
+                except discord.Forbidden: 
+                    log.error(f"Failed to post text message for {feed['name']} in {guild.name}. Missing permissions.")
+                    return
 
         # After posting the entire backlog/new batch, update the config to the LATEST post time found.
         if newest_post_time > 0 and newest_post_time > feed['last_time']:
