@@ -1,5 +1,5 @@
 import discord
-from redbot.core import commands, Config, checks
+from redbot.core import commands, Config, checks 
 import logging
 import asyncio
 from datetime import datetime
@@ -286,7 +286,9 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
         """Deploys or redeploys the persistent administrative configuration hub."""
         old_message_id = await self.config.guild(ctx.guild).setup_message_id()
         if old_message_id:
-            try: await ctx.channel.fetch_message(old_message_id).delete()
+            try:
+                old_message = await ctx.channel.fetch_message(old_message_id)
+                await old_message.delete()
             except discord.HTTPException: pass
 
         initial_embed = discord.Embed(title="RSS Feed Control", color=discord.Color.blue())
