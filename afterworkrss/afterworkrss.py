@@ -327,7 +327,6 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
         embed.set_footer(text=f"Last Action: {status}")
         await interaction.message.edit(embed=embed)
         
-        # Update the main setup panel to reflect new filter count
         setup_message_id = await self.config.guild(interaction.guild).setup_message_id()
         if setup_message_id:
             try:
@@ -338,7 +337,7 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
             except (discord.NotFound, discord.Forbidden):
                 pass
     
-    # --- Core RSS Logic (Simplified) ---
+    # --- Core RSS Logic ---
     
     async def _add_feed_to_config(self, guild: discord.Guild, feed_name: str, channel_id: int, url: str, backfill: bool = False) -> Union[dict, str]:
         """Validates, fetches initial post, and creates the new feed entry dict."""
@@ -371,7 +370,9 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
             
             feedparser_obj = feedparser.parse(html)
             if feedparser_obj.bozo:
-                raise ValueError(f"Bozo feed: {feedparser_obj.bozo_exception}")
+                soup = BeautifulSoup(html, 'html.parser')
+                error_msg = f"Bozo feed: {feedparser_obj.bozo_exception}. HTML Snippet: {soup.prettify()[:200]}..."
+                raise ValueError(error_msg)
             return feedparser_obj
         except Exception as e:
             raise Exception(f"Feed fetch failed: {e}")
@@ -379,8 +380,7 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
     def _time_tag_validation(self, entry: SimpleNamespace) -> Optional[int]:
         """Gets a unix timestamp from the entry."""
         entry_time = entry.get("updated_parsed", entry.get("published_parsed"))
-        if isinstance(entry_time, time.struct_time):
-            return int(time.mktime(entry_time))
+        if isinstance(entry_time, time.struct_time): return int(time.mktime(entry_time))
         return None
         
     async def _update_last_scraped(self, feed_name: str, guild_id: int, title: str, link: str, entry_time: int):
@@ -464,7 +464,6 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
 
         if newest_post_time > 0 and newest_post_time > feed['last_time']:
             await self._update_last_scraped(feed['name'], guild.id, newest_post_title, newest_post_link, newest_post_time)
-
 
 async def setup(bot):
     cog = AfterworkRSS(bot) 
