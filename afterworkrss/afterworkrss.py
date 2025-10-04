@@ -1,5 +1,5 @@
 import discord
-from redbot.core import commands, Config, checks # <-- FIX APPLIED HERE
+from redbot.core import commands, Config, checks 
 import logging
 import asyncio
 from datetime import datetime
@@ -136,26 +136,26 @@ class SetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    def _check_owner(self, interaction: discord.Interaction):
-        if interaction.user.id != self.cog.bot.owner_id: 
-            asyncio.create_task(interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=False))
-            return False
-        return True
+    async def _check_owner(self, interaction: discord.Interaction):
+        is_owner = await self.cog.bot.is_owner(interaction.user)
+        if not is_owner:
+            await interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=False)
+        return is_owner
 
     @discord.ui.button(label="Add Feed", style=discord.ButtonStyle.primary, custom_id="rss_add_feed_button", row=0)
     async def add_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self._check_owner(interaction): return
+        if not await self._check_owner(interaction): return
         modal = AddFeedModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="Remove Feed (Command)", style=discord.ButtonStyle.secondary, custom_id="rss_remove_feed_button", row=0)
     async def remove_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self._check_owner(interaction): return
+        if not await self._check_owner(interaction): return
         await interaction.response.send_message("Please use a command like `[p]rssremove <name>` to delete feeds.", ephemeral=True)
 
     @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.secondary, custom_id="rss_toggle_button", row=1)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self._check_owner(interaction): return
+        if not await self._check_owner(interaction): return
         
         await interaction.response.defer(ephemeral=True, thinking=True)
         
