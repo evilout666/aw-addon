@@ -1,5 +1,5 @@
 import discord
-from redbot.core import commands, Config, checks
+from redbot.core import commands, Config, checks 
 import logging
 import asyncio
 from datetime import datetime
@@ -287,6 +287,7 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
         old_message_id = await self.config.guild(ctx.guild).setup_message_id()
         if old_message_id:
             try:
+                # FIX APPLIED: First await the message, then delete it.
                 old_message = await ctx.channel.fetch_message(old_message_id)
                 await old_message.delete()
             except discord.HTTPException: pass
