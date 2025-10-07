@@ -232,9 +232,12 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         if not vc_id or message.channel.id != vc_id:
             return
 
-        player_message_id = await self.config.guild(message.guild).player_message_id()
+        # This check prevents the cog from deleting the player panel as it's being created.
+        if message.author.id == self.bot.user.id and message.embeds:
+            if message.embeds[0].title == "Music Controls":
+                return
 
-        # Delete any message in the channel that is not the player panel
+        player_message_id = await self.config.guild(message.guild).player_message_id()
         if message.id != player_message_id:
             try:
                 await message.delete()
