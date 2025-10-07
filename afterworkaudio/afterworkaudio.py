@@ -50,37 +50,28 @@ class PlayerView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
         
-        # Dynamically create the play/pause button
-        self.play_pause_button = discord.ui.Button(
+        # This button's state is determined when the view is created.
+        play_pause_button = discord.ui.Button(
             style=discord.ButtonStyle.danger if is_playing else discord.ButtonStyle.success,
             label="Pause" if is_playing else "Play",
             custom_id="player_pause_toggle"
         )
-        self.play_pause_button.callback = self.on_play_pause
-        self.add_item(self.play_pause_button)
-        
-        # Add the other static buttons
-        self.add_item(discord.ui.Button(label="Skip", style=discord.ButtonStyle.secondary, custom_id="player_skip"))
-        self.add_item(discord.ui.Button(label="Stop", style=discord.ButtonStyle.danger, custom_id="player_stop"))
-        
-        # Re-map callbacks after manual item addition
-        for item in self.children:
-            if item.custom_id == "player_song": item.callback = self.on_song
-            if item.custom_id == "player_skip": item.callback = self.on_skip
-            if item.custom_id == "player_stop": item.callback = self.on_stop
+        play_pause_button.callback = self.on_play_pause
+        self.add_item(play_pause_button)
 
-    # Manually define callbacks since we are adding items dynamically
-    @discord.ui.button(label="Song", style=discord.ButtonStyle.success, custom_id="player_song", row=0)
+    @discord.ui.button(label="Song", style=discord.ButtonStyle.primary, custom_id="player_song")
     async def on_song(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(PlayerPlayModal(self.cog))
 
     async def on_play_pause(self, interaction: discord.Interaction):
         await self.cog._invoke_audio_command(interaction, "pause")
 
-    async def on_skip(self, interaction: discord.Interaction):
+    @discord.ui.button(label="Skip", style=discord.ButtonStyle.secondary, custom_id="player_skip")
+    async def on_skip(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog._invoke_audio_command(interaction, "skip")
 
-    async def on_stop(self, interaction: discord.Interaction):
+    @discord.ui.button(label="Stop", style=discord.ButtonStyle.danger, custom_id="player_stop")
+    async def on_stop(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog._invoke_audio_command(interaction, "stop")
 
 
@@ -118,11 +109,10 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             is_enabled=False,
         )
         self.settings_view = SettingsView(self)
-        self.player_view = PlayerView(self, is_playing=False) # Base instance for cog_load
+        self.player_view = PlayerView(self, is_playing=False)
 
     async def cog_load(self):
         self.bot.add_view(self.settings_view)
-        # We add a base player view, but it will be replaced dynamically
         self.bot.add_view(self.player_view)
 
     async def _cleanup_player(self, guild: discord.Guild):
@@ -173,23 +163,18 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         await message.edit(embed=embed, view=self.settings_view)
 
     async def _update_player_view(self, guild: discord.Guild, is_playing: bool):
-        """Fetches the player message and updates its view with the correct play/pause state."""
         player_message_id = await self.config.guild(guild).player_message_id()
         vc_id = await self.config.guild(guild).music_voice_channel_id()
         
-        if not player_message_id or not vc_id:
-            return
-
+        if not player_message_id or not vc_id: return
         channel = guild.get_channel(vc_id)
-        if not channel:
-            return
+        if not channel: return
             
         try:
             message = await channel.fetch_message(player_message_id)
             new_view = PlayerView(self, is_playing=is_playing)
             await message.edit(view=new_view)
         except (discord.NotFound, discord.Forbidden):
-            # Message might have been deleted, clean up config
             await self.config.guild(guild).player_message_id.clear()
 
     @commands.Cog.listener("on_red_audio_track_start")
@@ -219,12 +204,9 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
         if after.channel and after.channel.id == voice_channel_id and len(after.channel.members) == 1:
             voice_channel = after.channel
-            
             await self._cleanup_player(guild)
-            
             embed = discord.Embed(title="Music Controls", description="Session started! Use buttons to control music.", color=discord.Color.green())
             try:
-                # Start with a "Play" button since nothing is playing yet
                 initial_view = PlayerView(self, is_playing=False)
                 player_message = await voice_channel.send(embed=embed, view=initial_view)
                 await self.config.guild(guild).player_message_id.set(player_message.id)
