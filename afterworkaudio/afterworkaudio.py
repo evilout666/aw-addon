@@ -66,10 +66,9 @@ class AddFilterModal(discord.ui.Modal, title="Add a Title Filter"):
         async with self.cog.config.guild(interaction.guild).filters() as filters:
             if text_to_hide.lower() not in [f.lower() for f in filters]:
                 filters.append(text_to_hide)
-                await interaction.response.send_message(f"✅ Filter `{text_to_hide}` added.", ephemeral=True)
-            else:
-                await interaction.response.send_message(f"⚠️ Filter `{text_to_hide}` already exists.", ephemeral=True)
         
+        # Defer silently instead of sending a confirmation.
+        await interaction.response.defer(ephemeral=True)
         await self.cog._update_player_message(interaction.guild)
 
 
@@ -88,7 +87,7 @@ class PlayerPlayModal(discord.ui.Modal, title="Request a Song"):
 # --- VIEWS ---
 
 class PlayerView(discord.ui.View):
-    def __init__(self, cog: commands.Cog, is_playing: bool = False):
+    def __init__(self, cog: commands.Cog, is_playing: bool = False, is_shuffling: bool = False):
         super().__init__(timeout=None)
         self.cog = cog
 
@@ -180,12 +179,10 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         """Helper to clean up and format song titles."""
         artist = author
         
-        # Apply custom filters first
         for f in filters:
             artist = re.sub(re.escape(f), '', artist, flags=re.IGNORECASE).strip()
             title = re.sub(re.escape(f), '', title, flags=re.IGNORECASE).strip()
 
-        # Try to split by common separators
         separators = [' - ', ' – ', ': ']
         for sep in separators:
             if sep in title:
@@ -195,7 +192,6 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
                     title = parts[1]
                     break
         
-        # Remove common suffixes and leading separators
         title = re.sub(r'\[.*?\]|\(.*?\)', '', title).strip(' -–:').strip()
         artist = artist.strip(' -–:').strip()
         
@@ -258,20 +254,17 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         player = lavalink.get_player(guild.id)
         filters = await self.config.guild(guild).filters()
         
-        # --- Update Channel Status ---
         try:
+            status_text = None
             if player and player.current:
                 status_text = self._format_title(player.current.author, player.current.title, filters)
-                status_text = status_text[:100] # Truncate
-                await channel.edit(status=status_text, reason="Update music status")
-            else:
-                await channel.edit(status=None, reason="Clear music status")
+                status_text = status_text[:100]
+            await channel.edit(status=status_text, reason="Update music status")
         except discord.Forbidden:
             log.warning(f"Missing 'Manage Channel' permission in '{guild.name}' to update VC status.")
         except Exception as e:
             log.error(f"Error updating VC status: {e}")
 
-        # --- Update Player Embed ---
         player_message_id = await self.config.guild(guild).player_message_id()
         if not player_message_id: return
         
@@ -385,9 +378,13 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             message.content = original_content
             message.author = original_author
             
-            if command_name in ["pause", "play"]:
-                await asyncio.sleep(0.5)
-                await self._update_player_message(interaction.guild)
+            if command_name in ["pause"]:
+                try:
+                    lavalink.get_player(interaction.guild.id)
+                    await asyncio.sleep(0.5)
+                    await self._update_player_message(interaction.guild)
+                except lavalink.errors.PlayerNotFound:
+                    pass
 
         except Exception as e:
             log.error(f"Error invoking '{command_name}': {e}", exc_info=True)
