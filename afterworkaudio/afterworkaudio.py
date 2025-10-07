@@ -3,15 +3,25 @@ from redbot.core import commands, Config
 import logging
 import asyncio
 from datetime import datetime
+from typing import Union
 
 log = logging.getLogger("red.AfterworkAudio")
 
 # --- UTILITY FUNCTIONS ---
 
-def _get_admin_footer(interaction: discord.Interaction, status_action: str) -> str:
-    """Helper to generate the administrative footer format."""
+def _get_admin_footer(obj: Union[commands.Context, discord.Interaction], status_action: str) -> str:
+    """
+    Helper to generate the administrative footer format.
+    Handles both Context (from commands) and Interaction (from buttons/modals).
+    """
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    return f"e.Network | {status_action} by {interaction.user.display_name} {current_time}"
+    # Check if the object is a Context from a text command
+    if isinstance(obj, commands.Context):
+        user_display_name = obj.author.display_name
+    # Otherwise, assume it's an Interaction from a button/modal
+    else:
+        user_display_name = obj.user.display_name
+    return f"e.Network | {status_action} by {user_display_name} {current_time}"
 
 async def _send_owner_dm(bot, message: str):
     """Sends a critical error message directly to the bot owner."""
