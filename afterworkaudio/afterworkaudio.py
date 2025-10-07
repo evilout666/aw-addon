@@ -1,7 +1,7 @@
 import discord
 from redbot.core import commands, Config
 import logging
-from typing import Optional
+from typing import Optional, List
 import lavalink
 import asyncio
 import re
@@ -245,24 +245,29 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             is_playing = player and player.is_playing and not player.paused
             
             embed = discord.Embed(title="Music Player", color=discord.Color.green())
+            embed.description = "Use the buttons below to control music."
             
             if player and player.current:
                 formatted_title = self._format_title(player.current.author, player.current.title)
                 embed.add_field(name="Now Playing", value=formatted_title, inline=False)
-                embed.description = "Use the buttons below to control music."
-            else:
-                embed.description = "Nothing is playing. Use the 'Song' button to request a track."
-
+            
             if player and player.queue:
-                tracks_to_show = player.queue[:5]
-                queue_list = [f"{i+1}. {self._format_title(track.author, track.title)}" for i, track in enumerate(tracks_to_show)]
+                tracks_to_show = player.queue[:1] # Show only the next song
                 
-                remaining_count = len(player.queue) - len(tracks_to_show)
-                if remaining_count > 0:
-                    queue_list.append(f"... and {remaining_count} more.")
+                # Check if we should even create the field
+                if tracks_to_show:
+                    next_track_title = self._format_title(tracks_to_show[0].author, tracks_to_show[0].title)
+                    remaining_count = len(player.queue) - 1 
+                    
+                    next_song_value = next_track_title
+                    if remaining_count > 0:
+                        next_song_value += f"\n\n... and {remaining_count} more in queue."
 
-                if queue_list:
-                    embed.add_field(name="Queue", value="\n".join(queue_list), inline=False)
+                    embed.add_field(name="Next Song", value=next_song_value, inline=False)
+
+            # If nothing is playing, override the description
+            if not player or (not player.current and not player.queue):
+                embed.description = "Nothing is playing. Use the 'Song' button to request a track."
             
             new_view = PlayerView(self, is_playing=is_playing)
             await message.edit(embed=embed, view=new_view)
@@ -354,7 +359,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             message.content = original_content
             message.author = original_author
             
-            if command_name in ["pause", "play"]:
+            if command_name in ["pause"]:
                 await asyncio.sleep(0.5)
                 await self._update_player_message(interaction.guild)
 
