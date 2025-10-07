@@ -231,8 +231,11 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         command = self.bot.get_command(command_name)
         if not command: return await interaction.followup.send(f"❌ Command not found.", ephemeral=False)
         try:
-            ctx = await self.bot.get_context(interaction, cls=commands.Context)
+            # Create context from the message the interaction is attached to
+            ctx = await self.bot.get_context(interaction.message)
+            # Override the author to be the user who clicked the button
             ctx.author = interaction.user
+            
             await command.invoke(ctx, *([query] if query else []))
             await interaction.followup.send(f"✅ Executed `{command_name}`.", ephemeral=True)
         except Exception as e:
