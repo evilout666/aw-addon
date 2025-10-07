@@ -245,26 +245,24 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             is_playing = player and player.is_playing and not player.paused
             
             embed = discord.Embed(title="Music Player", color=discord.Color.green())
-            description_parts = []
-
+            
             if player and player.current:
                 formatted_title = self._format_title(player.current.author, player.current.title)
                 embed.add_field(name="Now Playing", value=formatted_title, inline=False)
+                embed.description = "Use the buttons below to control music."
             else:
-                description_parts.append("Nothing is playing. Use the 'Song' button to request a track.")
+                embed.description = "Nothing is playing. Use the 'Song' button to request a track."
 
             if player and player.queue:
-                description_parts.append("\n**Queue:**")
                 tracks_to_show = player.queue[:5]
-                for i, track in enumerate(tracks_to_show):
-                    formatted_track = self._format_title(track.author, track.title)
-                    description_parts.append(f"`{i+1}.` {formatted_track}")
+                queue_list = [f"{i+1}. {self._format_title(track.author, track.title)}" for i, track in enumerate(tracks_to_show)]
                 
                 remaining_count = len(player.queue) - len(tracks_to_show)
                 if remaining_count > 0:
-                    description_parts.append(f"... and {remaining_count} more.")
-            
-            embed.description = "\n".join(description_parts)
+                    queue_list.append(f"... and {remaining_count} more.")
+
+                if queue_list:
+                    embed.add_field(name="Queue", value="\n".join(queue_list), inline=False)
             
             new_view = PlayerView(self, is_playing=is_playing)
             await message.edit(embed=embed, view=new_view)
