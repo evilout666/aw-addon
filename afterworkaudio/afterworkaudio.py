@@ -182,17 +182,22 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         try:
             message = await channel.fetch_message(player_message_id)
             player = lavalink.get_player(guild.id)
-            
-            # This is the single source of truth for the player's state.
             is_playing = player and player.is_playing and not player.paused
-
             embed = discord.Embed(title="Music Player", color=discord.Color.green())
 
             if player and player.current:
-                artist = player.current.author.replace("NFrealmusic - ", "")
-                embed.add_field(name="Now Playing", value=f"{artist} - {player.current.title}", inline=False)
-                if player.current.thumbnail:
-                    embed.set_thumbnail(url=player.current.thumbnail)
+                artist = player.current.author.replace("NFrealmusic - ", "").strip()
+                title = player.current.title
+                
+                # If the title starts with the artist name, remove it to avoid duplication
+                if title.lower().startswith(artist.lower()):
+                    # Find the separator (usually ' - ') and slice the string
+                    separator_pos = title.lower().find(artist.lower()) + len(artist)
+                    # Look for a separator like ' - '
+                    if ' - ' in title[separator_pos:separator_pos+4]:
+                         title = title[separator_pos:].lstrip(' -')
+
+                embed.add_field(name="Now Playing", value=f"{artist} - {title}", inline=False)
             
             if player and player.queue:
                 queue_list = [f"{i+1}. {track.title}" for i, track in enumerate(player.queue[:5])]
