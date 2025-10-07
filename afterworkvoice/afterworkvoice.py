@@ -69,11 +69,11 @@ class ChannelIDModal(discord.ui.Modal, title="Set Source Voice Channel"):
         try:
             channel_id = int(input_id)
         except ValueError:
-            return await interaction.response.send_message("❌ **Error:** Input must be a valid channel ID (numbers only).", ephemeral=False)
+            return await interaction.response.send_message("❌ **Error:** Input must be a valid channel ID (numbers only).", ephemeral=True)
         
         channel = interaction.guild.get_channel(channel_id)
         if not channel or not isinstance(channel, discord.VoiceChannel):
-            return await interaction.response.send_message(f"❌ **Error:** Could not find a Voice Channel with the ID `{channel_id}`.", ephemeral=False)
+            return await interaction.response.send_message(f"❌ **Error:** Could not find a Voice Channel with the ID `{channel_id}`.", ephemeral=True)
         
         await self.cog.config.guild(interaction.guild).source_id.set(channel_id)
         await self.cog.config.guild(interaction.guild).enabled.set(True)
@@ -100,7 +100,7 @@ class SetupView(discord.ui.View):
     @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="voice_set_button", row=0)
     async def set_source_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user):
-            return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=True) # Change to ephemeral=True
 
         modal = ChannelIDModal(self.cog, interaction.message)
         await interaction.response.send_modal(modal)
@@ -108,7 +108,7 @@ class SetupView(discord.ui.View):
     @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="voice_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user):
-            return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=True) # Change to ephemeral=True
         
         await interaction.response.defer(ephemeral=True, thinking=True)
         
@@ -364,7 +364,7 @@ class AfterworkVoice(commands.Cog, name="AfterworkVoice"):
                 )
                 new_voice_channel = moved_to_state.channel
                 
-                async with self.config.guild(guild).room_channels() as room_channels:
+                async with self.cog.config.guild(guild).room_channels() as room_channels:
                     room_channels[str(new_voice_channel.id)] = {"owner_id": member.id}
 
                 embed = discord.Embed(
