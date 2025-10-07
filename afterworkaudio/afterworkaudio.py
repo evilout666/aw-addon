@@ -183,9 +183,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         try:
             message = await channel.fetch_message(player_message_id)
             player = lavalink.get_player(guild.id)
-            
             is_playing = player and player.is_playing and not player.paused
-
             embed = discord.Embed(title="Music Player", color=discord.Color.green())
 
             if player and player.current:
@@ -216,12 +214,10 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
     @commands.Cog.listener("on_red_audio_track_pause")
     async def on_track_pause(self, guild, track, requester):
-        await asyncio.sleep(0.1) # Add delay to prevent race condition
         await self._update_player_message(guild)
         
     @commands.Cog.listener("on_red_audio_track_resume")
     async def on_track_resume(self, guild, track, requester):
-        await asyncio.sleep(0.1) # Add delay to prevent race condition
         await self._update_player_message(guild)
 
     @commands.Cog.listener("on_red_audio_player_stop")
@@ -292,6 +288,12 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             
             message.content = original_content
             message.author = original_author
+            
+            # This is the new, more robust fix.
+            if command_name == "pause":
+                await asyncio.sleep(0.5) # Give Lavalink a moment to process the state change
+                await self._update_player_message(interaction.guild)
+
         except Exception as e:
             log.error(f"Error invoking '{command_name}': {e}", exc_info=True)
             await interaction.followup.send("❌ An error occurred.", ephemeral=False)
@@ -303,7 +305,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         if not ctx.invoked_subcommand: await ctx.send_help()
 
     @afterworkaudio_group.command(name="deploy")
-    async def afterworkaudio_deploy(self, ctx: commands.Context):
+    async def afterworkaudio_deploy(self, ctx: commands....):
         """Deploys the persistent settings panel."""
         settings = await self.config.guild(ctx.guild).all()
         is_enabled = settings.get('is_enabled', False)
