@@ -58,17 +58,24 @@ class PlayModal(discord.ui.Modal, title="Play Music (URL or Search)"):
             return await interaction.followup.send("❌ You must be in a voice channel to play music.", ephemeral=False)
 
         try:
-            # Create a fake message to process
-            prefix = (await self.cog.bot.get_prefix(interaction.message))[0]
-            fake_message_content = f"{prefix}play {query}"
-            fake_message = discord.Object(id=interaction.message.id)
-            fake_message.content = fake_message_content
-            fake_message.author = interaction.user
-            fake_message.channel = interaction.channel
-            fake_message.guild = interaction.guild
+            # --- FIX: Use the real message object from the interaction ---
+            message = interaction.message
+            prefix = (await self.cog.bot.get_prefix(message))[0]
 
-            # Process the command as if the user typed it
-            await self.cog.bot.process_commands(fake_message)
+            # Store original attributes
+            original_content = message.content
+            original_author = message.author
+            
+            # Temporarily modify the message to process the command
+            message.content = f"{prefix}play {query}"
+            message.author = interaction.user
+
+            await self.cog.bot.process_commands(message)
+
+            # Restore original attributes
+            message.content = original_content
+            message.author = original_author
+            
             await interaction.followup.send(f"✅ Play command sent for `{query}`. Please wait for the audio player to respond.", ephemeral=True)
             
         except Exception as e:
@@ -93,17 +100,24 @@ class AudioControls(discord.ui.View):
             return await interaction.followup.send("❌ You must be in a voice channel to control playback.", ephemeral=False)
         
         try:
-            # Create a fake message to process
-            prefix = (await self.cog.bot.get_prefix(interaction.message))[0]
-            fake_message_content = f"{prefix}{command_name}"
-            fake_message = discord.Object(id=interaction.message.id)
-            fake_message.content = fake_message_content
-            fake_message.author = interaction.user
-            fake_message.channel = interaction.channel
-            fake_message.guild = interaction.guild
+            # --- FIX: Use the real message object from the interaction ---
+            message = interaction.message
+            prefix = (await self.cog.bot.get_prefix(message))[0]
 
-            # Process the command as if the user typed it
-            await self.cog.bot.process_commands(fake_message)
+            # Store original attributes
+            original_content = message.content
+            original_author = message.author
+
+            # Temporarily modify the message to process the command
+            message.content = f"{prefix}{command_name}"
+            message.author = interaction.user
+
+            await self.cog.bot.process_commands(message)
+
+            # Restore original attributes
+            message.content = original_content
+            message.author = original_author
+
             await interaction.followup.send(f"✅ Executed `{command_name}` command.", ephemeral=True)
             
         except Exception as e:
@@ -140,7 +154,9 @@ class AfterworkAudio(commands.Cog):
         guilds_data = await self.config.all_guilds()
         for guild_id, data in guilds_data.items():
             if data.get('setup_message_id'):
-                self.bot.add_view(AudioControls(self), message_id=data['setup_message_id'])
+                guild = self.bot.get_guild(guild_id)
+                if guild:
+                    self.bot.add_view(AudioControls(self), message_id=data['setup_message_id'])
 
     @commands.group(name="afterworkaudio")
     @commands.is_owner()
