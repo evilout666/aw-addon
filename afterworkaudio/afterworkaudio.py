@@ -221,6 +221,12 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
     async def on_queue_end(self, guild, track, requester):
         await self._update_player_message(guild, is_playing=False)
 
+    @commands.Cog.listener("on_red_audio_track_add")
+    async def on_track_add(self, guild, track, requester):
+        player = lavalink.get_player(guild.id)
+        is_currently_playing = player.is_playing and not player.paused
+        await self._update_player_message(guild, is_playing=is_currently_playing)
+
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         if member.bot: return
@@ -270,13 +276,11 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             command_str = f"{prefix}{command_name}"
             if query: command_str += f" {query}"
             
-            # Temporarily modify message to process command
             original_content, message.content = message.content, command_str
             original_author, message.author = message.author, interaction.user
             
             await self.bot.process_commands(message)
             
-            # Restore message
             message.content = original_content
             message.author = original_author
         except Exception as e:
