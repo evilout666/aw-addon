@@ -15,11 +15,15 @@ def _get_admin_footer(obj: Union[commands.Context, discord.Interaction], status_
     Handles both Context (from commands) and Interaction (from buttons/modals).
     """
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Check if the object is a command Context or an Interaction to get user correctly
     if isinstance(obj, commands.Context):
         user_display_name = obj.author.display_name
     else:
         user_display_name = obj.user.display_name
+        
     return f"e.Network | {status_action} by {user_display_name} {current_time}"
+
 
 async def _send_owner_dm(bot, message: str):
     """Sends a critical error message directly to the bot owner."""
@@ -30,6 +34,7 @@ async def _send_owner_dm(bot, message: str):
             await owner.send(embed=embed)
         except discord.Forbidden:
             log.error("Failed to DM owner. Owner must enable DMs.")
+
 
 # --- MODAL FOR PLAYING MUSIC ---
 
@@ -48,29 +53,9 @@ class PlayModal(discord.ui.Modal, title="Play Music (URL or Search)"):
 
     async def on_submit(self, interaction: discord.Interaction):
         query = self.source_input.value.strip()
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        # Use the robust command invocation helper
+        await self.cog._invoke_audio_command(interaction, "play", query=query)
 
-        audio_cog = self.cog.bot.get_cog("Audio")
-        if not audio_cog:
-            return await interaction.followup.send("❌ Audio cog is not loaded.", ephemeral=False)
-
-        if not interaction.user.voice or not interaction.user.voice.channel:
-            return await interaction.followup.send("❌ You must be in a voice channel to play music.", ephemeral=False)
-
-        try:
-            message = interaction.message
-            prefix = (await self.cog.bot.get_prefix(message))[0]
-            original_content = message.content
-            original_author = message.author
-            message.content = f"{prefix}play {query}"
-            message.author = interaction.user
-            await self.cog.bot.process_commands(message)
-            message.content = original_content
-            message.author = original_author
-            await interaction.followup.send(f"✅ Play command sent for `{query}`. Wait for the audio player to respond.", ephemeral=True)
-        except Exception as e:
-            log.error(f"Error during play command invocation: {e}", exc_info=True)
-            await interaction.followup.send("❌ Failed to execute play command.", ephemeral=False)
 
 # --- AUDIO CONTROL VIEW ---
 
@@ -78,49 +63,30 @@ class AudioControls(discord.ui.View):
     def __init__(self, cog: commands.Cog):
         super().__init__(timeout=None)
         self.cog = cog
-
-    async def _invoke_audio_command(self, interaction: discord.Interaction, command_name: str):
-        await interaction.response.defer(ephemeral=True, thinking=True)
-
-        audio_cog = self.cog.bot.get_cog("Audio")
-        if not audio_cog:
-            return await interaction.followup.send("❌ Audio cog is not loaded.", ephemeral=False)
-
-        if not interaction.user.voice or not interaction.user.voice.channel:
-            return await interaction.followup.send("❌ You must be in a voice channel to control playback.", ephemeral=False)
+        # Add the cog reference to the PlayModal button
+        # This ensures the modal can call the cog's helper method
+        play_button = discord.ui.Button(label="Play/Search", style=discord.ButtonStyle.success, custom_id="audio_play_url")
         
-        try:
-            message = interaction.message
-            prefix = (await self.cog.bot.get_prefix(message))[0]
-            original_content = message.content
-            original_author = message.author
-            message.content = f"{prefix}{command_name}"
-            message.author = interaction.user
-            await self.cog.bot.process_commands(message)
-            message.content = original_content
-            message.author = original_author
-            await interaction.followup.send(f"✅ Executed `{command_name}` command.", ephemeral=True)
-        except Exception as e:
-            log.error(f"Error during audio command invocation ({command_name}): {e}", exc_info=True)
-            await interaction.followup.send("❌ Failed to execute command.", ephemeral=False)
+        async def play_callback(interaction: discord.Interaction):
+            if not interaction.user.voice or not interaction.user.voice.channel:
+                return await interaction.response.send_message("❌ You must be in a voice channel to play music.", ephemeral=True)
+            await interaction.response.send_modal(PlayModal(self.cog))
+        
+        play_button.callback = play_callback
+        self.add_item(play_button)
 
-    @discord.ui.button(label="Play/Search", style=discord.ButtonStyle.success, custom_id="audio_play_url")
-    async def play_url_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.voice or not interaction.user.voice.channel:
-            return await interaction.response.send_message("❌ You must be in a voice channel to play music.", ephemeral=False)
-        await interaction.response.send_modal(PlayModal(self.cog))
 
     @discord.ui.button(label="Pause/Resume", style=discord.ButtonStyle.blurple, custom_id="audio_pause")
     async def pause_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._invoke_audio_command(interaction, "pause")
+        await self.cog._invoke_audio_command(interaction, "pause")
 
     @discord.ui.button(label="Skip", style=discord.ButtonStyle.primary, custom_id="audio_skip")
     async def skip_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._invoke_audio_command(interaction, "skip")
+        await self.cog._invoke_audio_command(interaction, "skip")
         
     @discord.ui.button(label="Stop", style=discord.ButtonStyle.danger, custom_id="audio_stop")
     async def stop_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._invoke_audio_command(interaction, "stop")
+        await self.cog._invoke_audio_command(interaction, "stop")
 
 # --- MAIN COG CLASS ---
 
@@ -132,14 +98,52 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=6677889900, force_registration=True)
         self.config.register_guild(setup_message_id=None)
+        self.view = AudioControls(self) # Keep a reference to the view
 
-    async def initialize(self):
+    async def cog_load(self):
+        """Cog load logic. Re-registers the persistent view."""
         guilds_data = await self.config.all_guilds()
         for guild_id, data in guilds_data.items():
             if data.get('setup_message_id'):
-                guild = self.bot.get_guild(guild_id)
-                if guild:
-                    self.bot.add_view(AudioControls(self), message_id=data['setup_message_id'])
+                self.bot.add_view(self.view, message_id=data['setup_message_id'])
+
+    def cog_unload(self):
+        """Cog unload logic. Stops the persistent view."""
+        self.view.stop()
+
+    async def _invoke_audio_command(self, interaction: discord.Interaction, command_name: str, *, query: str = None):
+        """More robust helper to invoke Audio commands directly."""
+        # Defer first, as creating context can take a moment
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        audio_cog = self.bot.get_cog("Audio")
+        if not audio_cog:
+            return await interaction.followup.send("❌ Audio cog is not loaded.", ephemeral=False)
+
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            return await interaction.followup.send("❌ You must be in a voice channel.", ephemeral=False)
+        
+        command = self.bot.get_command(command_name)
+        if not command:
+            log.error(f"Could not find the '{command_name}' command in the Audio cog.")
+            return await interaction.followup.send(f"❌ Could not find the `{command_name}` command.", ephemeral=False)
+
+        try:
+            # Create a new, temporary context object from the interaction
+            ctx = await self.bot.get_context(interaction, cls=commands.Context)
+            # Override attributes to match the user who clicked the button
+            ctx.author = interaction.user
+            ctx.voice_client = interaction.guild.voice_client
+
+            if query:
+                await command.invoke(ctx, query=query)
+            else:
+                await command.invoke(ctx)
+            
+            await interaction.followup.send(f"✅ Executed `{command_name}` command.", ephemeral=True)
+        except Exception as e:
+            log.error(f"Error invoking '{command_name}' from AfterworkAudio: {e}", exc_info=True)
+            await interaction.followup.send("❌ An error occurred while executing the command.", ephemeral=False)
 
     @commands.group(name="afterworkaudio")
     @commands.is_owner()
@@ -156,18 +160,20 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
         bot_member = ctx.guild.me
         if not ctx.channel.permissions_for(bot_member).manage_messages:
-            return await _send_owner_dm(self.bot, f"Config failed in **{ctx.guild.name}**. Need Send/Manage Messages in **#{ctx.channel.name}**.")
+            await _send_owner_dm(self.bot, f"Config failed in **{ctx.guild.name}**. Need Send/Manage Messages in **#{ctx.channel.name}**.")
+            return await ctx.send("❌ I lack the `Manage Messages` permission in this channel.", ephemeral=True)
 
         old_message_id = await self.config.guild(ctx.guild).setup_message_id()
         if old_message_id:
             try:
                 old_message = await ctx.channel.fetch_message(old_message_id)
                 await old_message.delete()
-            except discord.HTTPException: pass
+            except discord.HTTPException:
+                pass # Old message was likely deleted already
         
         embed = discord.Embed(
             title="Music Player",
-            description="Use these buttons to control music playback.",
+            description="Use these buttons to control music playback in the server.",
             color=await ctx.embed_color()
         )
         embed.add_field(
@@ -177,12 +183,16 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         )
         embed.set_footer(text=_get_admin_footer(ctx, "Audio Control Hub Deployed"))
         
-        view = AudioControls(self)
-        sent_message = await ctx.send(embed=embed, view=view)
+        sent_message = await ctx.send(embed=embed, view=self.view)
         
-        await sent_message.pin(reason="Afterwork Audio Control Hub.")
+        try:
+            await sent_message.pin(reason="Afterwork Audio Control Hub.")
+        except discord.Forbidden:
+            await ctx.send("⚠️ I couldn't pin the message. Please ensure I have the `Manage Messages` permission.", ephemeral=True, delete_after=15)
+        
         await self.config.guild(ctx.guild).setup_message_id.set(sent_message.id)
         
+        # Clean up the command and pin notification
         await ctx.message.delete()
         await asyncio.sleep(1)
         try:
@@ -190,10 +200,9 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
                 if message.type == discord.MessageType.pins_add and message.author.id == self.bot.user.id:
                     await message.delete()
                     break
-        except Exception: pass
+        except Exception:
+            pass
 
 async def setup(bot):
     cog = AfterworkAudio(bot)
-    await cog.initialize()
     await bot.add_cog(cog)
-
