@@ -217,8 +217,6 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             embed = discord.Embed(title="Music Controls", description="Session started! Use buttons to control music.", color=discord.Color.green())
             try:
                 player_message = await voice_channel.send(embed=embed, view=self.player_view)
-                # The following line is removed as you cannot pin messages in a voice channel's chat.
-                # await player_message.pin(reason="Active Music Session")
                 await self.config.guild(guild).player_message_id.set(player_message.id)
             except discord.Forbidden: log.error(f"Missing permissions to send messages in {voice_channel.name}")
 
@@ -229,18 +227,32 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         await interaction.response.defer(ephemeral=True, thinking=True)
         if not interaction.user.voice:
             return await interaction.followup.send("❌ You must be in a voice channel.", ephemeral=False)
-        command = self.bot.get_command(command_name)
-        if not command: return await interaction.followup.send(f"❌ Command not found.", ephemeral=False)
+
         try:
-            ctx = await self.bot.get_context(interaction.message)
-            ctx.author = interaction.user
-            
-            # This is the corrected way to invoke the command with an optional keyword argument.
+            message = interaction.message
+            # We need a prefix to simulate the command
+            prefix = (await self.bot.get_prefix(message))[0]
+
+            # Store original message state
+            original_content = message.content
+            original_author = message.author
+
+            # Build the command string
+            command_str = f"{prefix}{command_name}"
             if query:
-                await command.invoke(ctx, query=query)
-            else:
-                await command.invoke(ctx)
-                
+                command_str += f" {query}"
+            
+            # Modify the message object to fake a command invocation
+            message.content = command_str
+            message.author = interaction.user
+
+            # Process the command through the bot
+            await self.bot.process_commands(message)
+
+            # Restore the message object to its original state to avoid side effects
+            message.content = original_content
+            message.author = original_author
+            
             await interaction.followup.send(f"✅ Executed `{command_name}`.", ephemeral=True)
         except Exception as e:
             log.error(f"Error invoking '{command_name}': {e}", exc_info=True)
