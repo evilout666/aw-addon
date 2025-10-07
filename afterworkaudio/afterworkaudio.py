@@ -2,6 +2,7 @@ import discord
 from redbot.core import commands, Config
 import logging
 from typing import Optional
+import lavalink
 
 log = logging.getLogger("red.AfterworkAudio")
 
@@ -170,7 +171,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         
         await message.edit(embed=embed, view=self.settings_view)
 
-    async def _update_player_view(self, guild: discord.Guild, is_playing: bool):
+    async def _update_player_message(self, guild: discord.Guild, is_playing: bool):
         player_message_id = await self.config.guild(guild).player_message_id()
         vc_id = await self.config.guild(guild).music_voice_channel_id()
         
@@ -180,26 +181,45 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             
         try:
             message = await channel.fetch_message(player_message_id)
+            
+            player = lavalink.get_player(guild.id)
+            embed = discord.Embed(title="Music Player", color=discord.Color.green())
+
+            if player and player.current:
+                embed.add_field(name="Now Playing", value=f"{player.current.author} - {player.current.title}", inline=False)
+            
+            if player and player.queue:
+                queue_list = [f"{i+1}. {track.title}" for i, track in enumerate(player.queue[:5])]
+                if queue_list:
+                    embed.add_field(name="Next Song", value="\n".join(queue_list), inline=False)
+
+            if not embed.fields:
+                embed.description = "Nothing is playing. Use the 'Song' button to request a track."
+            
             new_view = PlayerView(self, is_playing=is_playing)
-            await message.edit(view=new_view)
+            await message.edit(embed=embed, view=new_view)
         except (discord.NotFound, discord.Forbidden):
             await self.config.guild(guild).player_message_id.clear()
 
     @commands.Cog.listener("on_red_audio_track_start")
     async def on_track_start(self, guild, track, requester):
-        await self._update_player_view(guild, is_playing=True)
+        await self._update_player_message(guild, is_playing=True)
 
     @commands.Cog.listener("on_red_audio_track_pause")
     async def on_track_pause(self, guild, track, requester):
-        await self._update_player_view(guild, is_playing=False)
+        await self._update_player_message(guild, is_playing=False)
         
     @commands.Cog.listener("on_red_audio_track_resume")
     async def on_track_resume(self, guild, track, requester):
-        await self._update_player_view(guild, is_playing=True)
+        await self._update_player_message(guild, is_playing=True)
 
     @commands.Cog.listener("on_red_audio_player_stop")
     async def on_player_stop(self, guild, track, requester):
-        await self._update_player_view(guild, is_playing=False)
+        await self._update_player_message(guild, is_playing=False)
+        
+    @commands.Cog.listener("on_red_audio_queue_end")
+    async def on_queue_end(self, guild, track, requester):
+        await self._update_player_message(guild, is_playing=False)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
@@ -213,7 +233,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         if after.channel and after.channel.id == voice_channel_id and len(after.channel.members) == 1:
             voice_channel = after.channel
             await self._cleanup_player(guild)
-            embed = discord.Embed(title="Music Controls", description="Session started! Use buttons to control music.", color=discord.Color.green())
+            embed = discord.Embed(title="Music Player", description="Use the 'Song' button to request a track.", color=discord.Color.green())
             try:
                 initial_view = PlayerView(self, is_playing=False)
                 player_message = await voice_channel.send(embed=embed, view=initial_view)
@@ -225,26 +245,21 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if not message.guild:
-            return
-
+        if not message.guild: return
         vc_id = await self.config.guild(message.guild).music_voice_channel_id()
-        if not vc_id or message.channel.id != vc_id:
-            return
+        if not vc_id or message.channel.id != vc_id: return
 
         if message.author.id == self.bot.user.id and message.embeds:
-            if message.embeds[0].title == "Music Controls":
+            if message.embeds[0].title == "Music Player":
                 return
 
         player_message_id = await self.config.guild(message.guild).player_message_id()
         if message.id != player_message_id:
             try:
                 await message.delete()
-            except (discord.Forbidden, discord.NotFound):
-                pass
+            except (discord.Forbidden, discord.NotFound): pass
 
     async def _invoke_audio_command(self, interaction: discord.Interaction, command_name: str, *, query: str = None):
-        # This defer without 'thinking=True' will acknowledge the interaction silently.
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.voice:
             return await interaction.followup.send("❌ You must be in a voice channel.", ephemeral=False)
@@ -252,18 +267,18 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         try:
             message = interaction.message
             prefix = (await self.bot.get_prefix(message))[0]
-            original_content = message.content
-            original_author = message.author
             command_str = f"{prefix}{command_name}"
-            if query:
-                command_str += f" {query}"
+            if query: command_str += f" {query}"
             
-            message.content = command_str
-            message.author = interaction.user
+            # Temporarily modify message to process command
+            original_content, message.content = message.content, command_str
+            original_author, message.author = message.author, interaction.user
+            
             await self.bot.process_commands(message)
+            
+            # Restore message
             message.content = original_content
             message.author = original_author
-            
         except Exception as e:
             log.error(f"Error invoking '{command_name}': {e}", exc_info=True)
             await interaction.followup.send("❌ An error occurred.", ephemeral=False)
@@ -277,7 +292,6 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
     @afterworkaudio_group.command(name="deploy")
     async def afterworkaudio_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel."""
-        
         settings = await self.config.guild(ctx.guild).all()
         is_enabled = settings.get('is_enabled', False)
         vc_id = settings.get('music_voice_channel_id')
