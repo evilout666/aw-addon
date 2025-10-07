@@ -8,6 +8,23 @@ import asyncio
 log = logging.getLogger("red.AfterworkAudio")
 
 
+# --- UTILITY ---
+
+async def _send_owner_dm(bot, message: str):
+    """Sends a critical error message directly to the bot owner."""
+    owner = bot.get_user(bot.owner_id)
+    if owner:
+        try:
+            embed = discord.Embed(
+                title="⚠️ Afterwork Audio Error",
+                description=message,
+                color=discord.Color.red()
+            )
+            await owner.send(embed=embed)
+        except discord.Forbidden:
+            log.error("Failed to DM owner. Owner must enable DMs.")
+
+
 # --- MODALS ---
 
 class SetVoiceChannelModal(discord.ui.Modal, title="Set Music Channel"):
@@ -29,7 +46,7 @@ class SetVoiceChannelModal(discord.ui.Modal, title="Set Music Channel"):
             return await interaction.response.send_message("❌ Voice channel not found.", ephemeral=True)
 
         await self.cog.config.guild(interaction.guild).music_voice_channel_id.set(channel.id)
-        await interaction.response.send_message(f"✅ Music Channel set to **{channel.name}**.", ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
         await self.cog.update_settings_message(interaction.guild, interaction.message)
 
 
@@ -57,26 +74,26 @@ class PlayerView(discord.ui.View):
         self.add_item(song_button)
 
         play_pause_button = discord.ui.Button(
-            emoji='⏸️' if is_playing else '▶️',
+            label="Pause" if is_playing else "Play",
             style=discord.ButtonStyle.success,
             custom_id="player_pause_toggle"
         )
         play_pause_button.callback = self.on_play_pause
         self.add_item(play_pause_button)
 
-        skip_button = discord.ui.Button(emoji='⏭️', style=discord.ButtonStyle.success, custom_id="player_skip")
+        skip_button = discord.ui.Button(label="Next", style=discord.ButtonStyle.success, custom_id="player_skip")
         skip_button.callback = self.on_skip
         self.add_item(skip_button)
 
         shuffle_button = discord.ui.Button(
-            emoji='🔀',
+            label="Mode",
             style=discord.ButtonStyle.success if is_shuffling else discord.ButtonStyle.secondary,
             custom_id="player_shuffle_toggle"
         )
         shuffle_button.callback = self.on_shuffle
         self.add_item(shuffle_button)
 
-        stop_button = discord.ui.Button(emoji='⏹️', style=discord.ButtonStyle.danger, custom_id="player_stop")
+        stop_button = discord.ui.Button(label="Stop", style=discord.ButtonStyle.danger, custom_id="player_stop")
         stop_button.callback = self.on_stop
         self.add_item(stop_button)
 
@@ -100,6 +117,12 @@ class SettingsView(discord.ui.View):
     def __init__(self, cog: commands.Cog):
         super().__init__(timeout=None)
         self.cog = cog
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if await self.cog.bot.is_owner(interaction.user):
+            return True
+        await interaction.response.send_message("Only the bot owner can use these controls.", ephemeral=True)
+        return False
 
     @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="set_voice_channel")
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -270,7 +293,6 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             await self._cleanup_player(guild)
             embed = discord.Embed(title="Music Player", description="Use the 'Song' button to request a track.", color=discord.Color.green())
             try:
-                # This is the corrected logic. Always start with a default view.
                 initial_view = PlayerView(self, is_playing=False, is_shuffling=False)
                 player_message = await voice_channel.send(embed=embed, view=initial_view)
                 await self.config.guild(guild).player_message_id.set(player_message.id)
