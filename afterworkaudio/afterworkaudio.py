@@ -26,16 +26,8 @@ class SetVoiceChannelModal(discord.ui.Modal, title="Set Trigger Voice Channel"):
         if not channel or not isinstance(channel, discord.VoiceChannel):
             return await interaction.response.send_message("❌ Voice channel not found.", ephemeral=True)
 
-        try:
-            await channel.set_permissions(interaction.guild.default_role, send_messages=False, reason="Set as AfterworkAudio music channel.")
-        except discord.Forbidden:
-            await self.cog._send_owner_dm(f"Failed to set view-only permissions for **{channel.name}** in **{interaction.guild.name}**. I need the `Manage Channels` permission.")
-            await interaction.response.send_message(f"✅ Trigger VC set to **{channel.name}**. \n⚠️ **Warning:** I could not set view-only permissions.", ephemeral=True)
-        except Exception as e:
-            log.error(f"An unexpected error occurred while setting permissions for channel {channel_id}: {e}")
-
         await self.cog.config.guild(interaction.guild).music_voice_channel_id.set(channel.id)
-        await interaction.response.send_message(f"✅ Trigger VC set to **{channel.name}** and is now view-only.", ephemeral=True)
+        await interaction.response.send_message(f"✅ Trigger VC set to **{channel.name}**.", ephemeral=True)
         await self.cog.update_settings_message(interaction.guild, interaction.message)
 
 
@@ -58,26 +50,22 @@ class PlayerView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
 
-        # Button 1: Song
         song_button = discord.ui.Button(label="Song", style=discord.ButtonStyle.primary, custom_id="player_song")
         song_button.callback = self.on_song
         self.add_item(song_button)
 
-        # Button 2: Play/Pause (Dynamic)
         play_pause_button = discord.ui.Button(
             label="Pause" if is_playing else "Play",
-            style=discord.ButtonStyle.secondary,  # Always grey
+            style=discord.ButtonStyle.secondary,
             custom_id="player_pause_toggle"
         )
         play_pause_button.callback = self.on_play_pause
         self.add_item(play_pause_button)
 
-        # Button 3: Skip
         skip_button = discord.ui.Button(label="Skip", style=discord.ButtonStyle.secondary, custom_id="player_skip")
         skip_button.callback = self.on_skip
         self.add_item(skip_button)
 
-        # Button 4: Stop
         stop_button = discord.ui.Button(label="Stop", style=discord.ButtonStyle.danger, custom_id="player_stop")
         stop_button.callback = self.on_stop
         self.add_item(stop_button)
@@ -129,20 +117,11 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             is_enabled=False,
         )
         self.settings_view = SettingsView(self)
-        # Add a base view for cog loading; it will be replaced by dynamic ones
         self.player_view = PlayerView(self, is_playing=False)
 
     async def cog_load(self):
         self.bot.add_view(self.settings_view)
         self.bot.add_view(self.player_view)
-
-    async def _send_owner_dm(self, message: str):
-        owner = self.bot.get_user(self.bot.owner_id)
-        if owner:
-            try:
-                await owner.send(f"**AfterworkAudio Warning:**\n{message}")
-            except discord.Forbidden:
-                log.warning("Could not send owner a DM. They may have DMs disabled.")
 
     async def _cleanup_player(self, guild: discord.Guild):
         vc_id = await self.config.guild(guild).music_voice_channel_id()
@@ -246,13 +225,17 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if not message.guild or not message.author.id == self.bot.user.id:
+        if not message.guild:
             return
 
         vc_id = await self.config.guild(message.guild).music_voice_channel_id()
+        if not vc_id or message.channel.id != vc_id:
+            return
+
         player_message_id = await self.config.guild(message.guild).player_message_id()
 
-        if message.channel.id == vc_id and message.id != player_message_id:
+        # Delete any message in the channel that is not the player panel
+        if message.id != player_message_id:
             try:
                 await message.delete()
             except (discord.Forbidden, discord.NotFound):
