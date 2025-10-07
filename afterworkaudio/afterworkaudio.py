@@ -198,7 +198,8 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         embed.add_field(name="System Status", value=status_display, inline=False)
         embed.add_field(name="Channel", value=channel_display, inline=False)
         
-        toggle_button = discord.utils.get(message.view.children, custom_id="toggle_automation")
+        # Get the button from the cog's persistent view instance
+        toggle_button = discord.utils.get(self.settings_view.children, custom_id="toggle_automation")
         if is_enabled:
             toggle_button.label = "Disable"
             toggle_button.style = discord.ButtonStyle.danger
@@ -206,7 +207,8 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             toggle_button.label = "Enable"
             toggle_button.style = discord.ButtonStyle.success
         
-        await message.edit(embed=embed, view=message.view)
+        # Pass the cog's persistent view instance to the edit method
+        await message.edit(embed=embed, view=self.settings_view)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
