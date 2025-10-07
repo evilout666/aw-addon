@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 import lavalink
 import asyncio
+import re
 
 log = logging.getLogger("red.AfterworkAudio")
 
@@ -207,48 +208,37 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         await message.edit(embed=embed, view=self.settings_view)
 
     async def _update_player_message(self, guild: discord.Guild):
+        player_message_id = await self.config.guild(guild).player_message_id()
         vc_id = await self.config.guild(guild).music_voice_channel_id()
-        if not vc_id: return
         
+        if not player_message_id or not vc_id: return
         channel = guild.get_channel(vc_id)
         if not channel: return
             
-        player = lavalink.get_player(guild.id)
-        
-        # --- Update Channel Status ---
-        try:
-            if player and player.current:
-                artist = player.current.author.replace("NFrealmusic - ", "").strip()
-                title = player.current.title
-                status_text = f"🎵 {artist} - {title}"
-                if len(status_text) > 100:
-                    status_text = status_text[:97] + "..."
-                await channel.edit(status=status_text, reason="Update music status")
-            else:
-                await channel.edit(status=None, reason="Clear music status")
-        except discord.Forbidden:
-            log.warning(f"Missing 'Manage Channel' permission in '{guild.name}' to update VC status.")
-        except Exception as e:
-            log.error(f"Error updating VC status: {e}")
-
-        # --- Update Player Embed ---
-        player_message_id = await self.config.guild(guild).player_message_id()
-        if not player_message_id: return
-        
         try:
             message = await channel.fetch_message(player_message_id)
+            player = lavalink.get_player(guild.id)
+            
             is_playing = player and player.is_playing and not player.paused
             is_shuffling = player and player.shuffle
 
             embed = discord.Embed(title="Music Player", color=discord.Color.green())
 
             if player and player.current:
-                artist = player.current.author.replace("NFrealmusic - ", "").strip()
+                artist = player.current.author
                 title = player.current.title
-                if title.lower().startswith(artist.lower()):
-                    separator_pos = title.lower().find(artist.lower()) + len(artist)
-                    if ' - ' in title[separator_pos:separator_pos+4]:
-                         title = title[separator_pos:].lstrip(' -')
+
+                separators = [' - ', ' – ', ': ']
+                for sep in separators:
+                    if sep in title:
+                        parts = title.split(sep, 1)
+                        if len(parts[0]) < len(parts[1]):
+                            artist = parts[0]
+                            title = parts[1]
+                            break
+                
+                title = re.sub(r'\[.*?\]|\(.*?\)', '', title).strip()
+
                 embed.add_field(name="Now Playing", value=f"{artist} - {title}", inline=False)
             
             if player and player.queue:
