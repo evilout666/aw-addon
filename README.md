@@ -1,17 +1,1 @@
-# AWCogs (Flattened Development Repo)
-THIS REPO IS NOT FOR PUBLIC USE. DEVELOPMENT / TESTING ONLY.
-
-All cog files have been flattened into single Python modules at the repository root for manual deployment.
-
-Available modules:
-- afterwork.py (optional manager panel)
-- aw_embed.py
-- aw_tv.py
-- aw_voice.py
-
-Notes:
-- Metadata (info.json) and package folders were removed intentionally.
-- Manual loading only: use `[p]load aw_embed`, `[p]load aw_tv`, etc., after placing files in your bot cogs path.
-- The manager panel expects these filenames and may not function outside this layout.
-
-Use at your own risk.
+AfterWork Cogs for Red-DiscordBotThis repository contains a suite of custom, standalone cogs for Red-DiscordBot, designed for private server administration. Each cog is built around a persistent, interactive control panel for easy, owner-only management.Design PhilosophyAll cogs in this suite follow a consistent design pattern:Owner-Only: All configuration commands and interactions are restricted to the bot owner for maximum security.Interactive Hub: Each cog is managed via a single, persistent, pinned message (a "hub") that is deployed with a single command.Modern UI: Configuration is handled through Discord Components like Buttons and Modals (pop-up forms), not complex text commands.Clean UX: The cogs use a "Public Error, Ephemeral Success" policy. Errors are posted publicly for immediate visibility, while success confirmations are private and temporary, keeping channels clean.Available CogsCog File (.py)DescriptionDeploy Commandafterworkvoice.pyManages control panels for temporary voice channels created by an external cog.[p]afterworkvoice deployafterworktv.pyReformats and reposts webhook embeds from Sonarr and Radarr into a clean channel.[p]afterworktv deployafterworkhide.pyHides all channels within a specified category from roles with admin permissions.[p]afterworkhide deployafterworkembed.pyA secure utility to send custom, complex embed messages from a JSON payload.[p]afterworkembed deployafterworkaudio.pyProvides a persistent button-based control panel for Red's official Audio cog.[p]awaudioafterwork.pyA master utility cog to deploy all other AfterWork hubs at once.[p]afterworkInstallation and UsagePlacement: Place the desired .py cog files into a valid cog path for your Red-DiscordBot instance. You can check your current paths with [p]paths.Loading: Load a specific cog using its filename (without the .py extension). For example:[p]load afterworkvoice
