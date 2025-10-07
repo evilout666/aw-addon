@@ -219,7 +219,7 @@ class SetupView(discord.ui.View):
         # Acknowledge the thinking state
         await interaction.followup.defer()
 
-# --- MAIN COG CLASS (Existing Structure) ---
+# --- MAIN COG CLASS ---
 
 class AfterworkRSS(commands.Cog, name="AfterworkRSS"): 
     def __init__(self, bot):
@@ -240,9 +240,8 @@ class AfterworkRSS(commands.Cog, name="AfterworkRSS"):
         self.start_background_loop()
 
     def start_background_loop(self):
-        # NOTE: Missing read_feeds() implementation; assuming it exists and handles the aiohttp/feedparser logic.
+        # NOTE: Placeholder for actual read_feeds logic
         if not self._read_feeds_loop: 
-            # Placeholder for actual read_feeds loop start
             self._read_feeds_loop = self.bot.loop.create_task(self._read_feeds_task()) 
 
     def cog_unload(self):
