@@ -48,26 +48,39 @@ class PlayerPlayModal(discord.ui.Modal, title="Request a Song"):
 # --- VIEWS ---
 
 class PlayerView(discord.ui.View):
-    def __init__(self, cog: commands.Cog, is_playing: bool = False):
+    def __init__(self, cog: commands.Cog, is_playing: bool = False, is_shuffling: bool = False):
         super().__init__(timeout=None)
         self.cog = cog
 
+        # Button 1: Song
         song_button = discord.ui.Button(label="Song", style=discord.ButtonStyle.primary, custom_id="player_song")
         song_button.callback = self.on_song
         self.add_item(song_button)
 
+        # Button 2: Play/Pause (Dynamic)
         play_pause_button = discord.ui.Button(
             label="Pause" if is_playing else "Play",
-            style=discord.ButtonStyle.secondary,
+            style=discord.ButtonStyle.danger if is_playing else discord.ButtonStyle.success, # Red when playing, Green when paused
             custom_id="player_pause_toggle"
         )
         play_pause_button.callback = self.on_play_pause
         self.add_item(play_pause_button)
 
-        skip_button = discord.ui.Button(label="Skip", style=discord.ButtonStyle.secondary, custom_id="player_skip")
+        # Button 3: Skip
+        skip_button = discord.ui.Button(label="Skip", style=discord.ButtonStyle.success, custom_id="player_skip")
         skip_button.callback = self.on_skip
         self.add_item(skip_button)
 
+        # Button 4: Shuffle (Dynamic)
+        shuffle_button = discord.ui.Button(
+            label="Shuffle",
+            style=discord.ButtonStyle.success if is_shuffling else discord.ButtonStyle.secondary, # Green when on, Grey when off
+            custom_id="player_shuffle_toggle"
+        )
+        shuffle_button.callback = self.on_shuffle
+        self.add_item(shuffle_button)
+
+        # Button 5: Stop
         stop_button = discord.ui.Button(label="Stop", style=discord.ButtonStyle.danger, custom_id="player_stop")
         stop_button.callback = self.on_stop
         self.add_item(stop_button)
@@ -80,6 +93,9 @@ class PlayerView(discord.ui.View):
 
     async def on_skip(self, interaction: discord.Interaction):
         await self.cog._invoke_audio_command(interaction, "skip")
+
+    async def on_shuffle(self, interaction: discord.Interaction):
+        await self.cog._invoke_audio_command(interaction, "shuffle")
 
     async def on_stop(self, interaction: discord.Interaction):
         await self.cog._invoke_audio_command(interaction, "stop")
@@ -183,7 +199,10 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         try:
             message = await channel.fetch_message(player_message_id)
             player = lavalink.get_player(guild.id)
+            
             is_playing = player and player.is_playing and not player.paused
+            is_shuffling = player and player.shuffle
+
             embed = discord.Embed(title="Music Player", color=discord.Color.green())
 
             if player and player.current:
@@ -203,7 +222,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             if not embed.fields:
                 embed.description = "Nothing is playing. Use the 'Song' button to request a track."
             
-            new_view = PlayerView(self, is_playing=is_playing)
+            new_view = PlayerView(self, is_playing=is_playing, is_shuffling=is_shuffling)
             await message.edit(embed=embed, view=new_view)
         except (discord.NotFound, discord.Forbidden):
             await self.config.guild(guild).player_message_id.clear()
@@ -214,12 +233,10 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
     @commands.Cog.listener("on_red_audio_track_pause")
     async def on_track_pause(self, guild, track, requester):
-        await asyncio.sleep(0.1)
         await self._update_player_message(guild)
         
     @commands.Cog.listener("on_red_audio_track_resume")
     async def on_track_resume(self, guild, track, requester):
-        await asyncio.sleep(0.1)
         await self._update_player_message(guild)
 
     @commands.Cog.listener("on_red_audio_player_stop")
@@ -232,6 +249,10 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
     @commands.Cog.listener("on_red_audio_track_add")
     async def on_track_add(self, guild, track, requester):
+        await self._update_player_message(guild)
+
+    @commands.Cog.listener("on_red_audio_shuffle_change")
+    async def on_shuffle_change(self, guild, shuffle_state):
         await self._update_player_message(guild)
 
     @commands.Cog.listener()
@@ -248,7 +269,10 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             await self._cleanup_player(guild)
             embed = discord.Embed(title="Music Player", description="Use the 'Song' button to request a track.", color=discord.Color.green())
             try:
-                initial_view = PlayerView(self, is_playing=False)
+                # Get the initial shuffle state of the player
+                player = lavalink.get_player(guild.id)
+                initial_shuffle = player.shuffle if player else False
+                initial_view = PlayerView(self, is_playing=False, is_shuffling=initial_shuffle)
                 player_message = await voice_channel.send(embed=embed, view=initial_view)
                 await self.config.guild(guild).player_message_id.set(player_message.id)
             except discord.Forbidden: log.error(f"Missing permissions to send messages in {voice_channel.name}")
@@ -291,7 +315,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             message.content = original_content
             message.author = original_author
             
-            if command_name == "pause":
+            if command_name in ["pause", "shuffle"]:
                 await asyncio.sleep(0.5)
                 await self._update_player_message(interaction.guild)
 
