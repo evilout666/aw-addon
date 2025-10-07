@@ -16,7 +16,8 @@ def _get_admin_footer(obj: Union[commands.Context, discord.Interaction], status_
     """
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    # Check if the object is a command Context or an Interaction to get user correctly
+    # This `isinstance` check is the specific fix for your error.
+    # It correctly uses .author for commands and .user for interactions.
     if isinstance(obj, commands.Context):
         user_display_name = obj.author.display_name
     else:
@@ -53,7 +54,7 @@ class PlayModal(discord.ui.Modal, title="Play Music (URL or Search)"):
 
     async def on_submit(self, interaction: discord.Interaction):
         query = self.source_input.value.strip()
-        # Use the robust command invocation helper
+        # Use the robust command invocation helper from the main cog class
         await self.cog._invoke_audio_command(interaction, "play", query=query)
 
 
@@ -63,18 +64,12 @@ class AudioControls(discord.ui.View):
     def __init__(self, cog: commands.Cog):
         super().__init__(timeout=None)
         self.cog = cog
-        # Add the cog reference to the PlayModal button
-        # This ensures the modal can call the cog's helper method
-        play_button = discord.ui.Button(label="Play/Search", style=discord.ButtonStyle.success, custom_id="audio_play_url")
-        
-        async def play_callback(interaction: discord.Interaction):
-            if not interaction.user.voice or not interaction.user.voice.channel:
-                return await interaction.response.send_message("❌ You must be in a voice channel to play music.", ephemeral=True)
-            await interaction.response.send_modal(PlayModal(self.cog))
-        
-        play_button.callback = play_callback
-        self.add_item(play_button)
 
+    @discord.ui.button(label="Play/Search", style=discord.ButtonStyle.success, custom_id="audio_play_url")
+    async def play_url_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            return await interaction.response.send_message("❌ You must be in a voice channel to play music.", ephemeral=True)
+        await interaction.response.send_modal(PlayModal(self.cog))
 
     @discord.ui.button(label="Pause/Resume", style=discord.ButtonStyle.blurple, custom_id="audio_pause")
     async def pause_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -113,7 +108,6 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
     async def _invoke_audio_command(self, interaction: discord.Interaction, command_name: str, *, query: str = None):
         """More robust helper to invoke Audio commands directly."""
-        # Defer first, as creating context can take a moment
         await interaction.response.defer(ephemeral=True, thinking=True)
 
         audio_cog = self.bot.get_cog("Audio")
@@ -129,16 +123,12 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             return await interaction.followup.send(f"❌ Could not find the `{command_name}` command.", ephemeral=False)
 
         try:
-            # Create a new, temporary context object from the interaction
             ctx = await self.bot.get_context(interaction, cls=commands.Context)
-            # Override attributes to match the user who clicked the button
             ctx.author = interaction.user
             ctx.voice_client = interaction.guild.voice_client
 
-            if query:
-                await command.invoke(ctx, query=query)
-            else:
-                await command.invoke(ctx)
+            args = [query] if query else []
+            await command.invoke(ctx, *args)
             
             await interaction.followup.send(f"✅ Executed `{command_name}` command.", ephemeral=True)
         except Exception as e:
@@ -169,7 +159,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
                 old_message = await ctx.channel.fetch_message(old_message_id)
                 await old_message.delete()
             except discord.HTTPException:
-                pass # Old message was likely deleted already
+                pass
         
         embed = discord.Embed(
             title="Music Player",
@@ -192,7 +182,6 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         
         await self.config.guild(ctx.guild).setup_message_id.set(sent_message.id)
         
-        # Clean up the command and pin notification
         await ctx.message.delete()
         await asyncio.sleep(1)
         try:
