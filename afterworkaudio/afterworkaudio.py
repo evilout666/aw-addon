@@ -186,14 +186,17 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         is_enabled = await self.config.guild(guild).is_enabled()
         vc_id = await self.config.guild(guild).music_voice_channel_id()
         
-        status_text = f"**Status:** {'<:online:1134460593 online> Active' if is_enabled else '<:offline:1134460591 offline> Inactive'}\n"
+        status_display = "🟢 Active" if is_enabled else "🔴 Inactive"
+        
         if vc_id and (channel := guild.get_channel(vc_id)):
-            status_text += f"**Channel:** {channel.name} (`{channel.id}`)"
+            channel_display = f"**{channel.name}** (`{channel.id}`)"
         else:
-            status_text += "**Channel:** Not Set"
+            channel_display = "*Not configured*"
 
-        embed = discord.Embed(title="Music Channel Control", color=guild.me.color)
-        embed.add_field(name="System Status", value=status_text, inline=False)
+        embed = message.embeds[0]
+        embed.clear_fields()
+        embed.add_field(name="System Status", value=status_display, inline=False)
+        embed.add_field(name="Channel", value=channel_display, inline=False)
         
         toggle_button = discord.utils.get(message.view.children, custom_id="toggle_automation")
         if is_enabled:
@@ -257,18 +260,20 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         is_enabled = await self.config.guild(ctx.guild).is_enabled()
         vc_id = await self.config.guild(ctx.guild).music_voice_channel_id()
         
-        status_text = f"**Status:** {'<:online:1134460593 online> Active' if is_enabled else '<:offline:1134460591 offline> Inactive'}\n"
+        status_display = "🟢 Active" if is_enabled else "🔴 Inactive"
+        
         if vc_id and (channel := ctx.guild.get_channel(vc_id)):
-            status_text += f"**Channel:** {channel.name} (`{channel.id}`)"
+            channel_display = f"**{channel.name}** (`{channel.id}`)"
         else:
-            status_text += "**Channel:** Not Set"
+            channel_display = "*Not configured*"
             
         embed = discord.Embed(
             title="Music Channel Control",
             description="Use this panel to set the music voice channel where the player will be active.",
             color=await ctx.embed_color()
         )
-        embed.add_field(name="System Status", value=status_text, inline=False)
+        embed.add_field(name="System Status", value=status_display, inline=False)
+        embed.add_field(name="Channel", value=channel_display, inline=False)
         
         toggle_button = discord.utils.get(self.settings_view.children, custom_id="toggle_automation")
         if is_enabled:
