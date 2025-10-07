@@ -26,7 +26,6 @@ class SetVoiceChannelModal(discord.ui.Modal, title="Set Trigger Voice Channel"):
         if not channel or not isinstance(channel, discord.VoiceChannel):
             return await interaction.response.send_message("❌ Voice channel not found.", ephemeral=True)
 
-        # Set permissions to make the channel view-only
         try:
             await channel.set_permissions(interaction.guild.default_role, send_messages=False, reason="Set as AfterworkAudio music channel.")
         except discord.Forbidden:
@@ -58,28 +57,41 @@ class PlayerView(discord.ui.View):
     def __init__(self, cog: commands.Cog, is_playing: bool = False):
         super().__init__(timeout=None)
         self.cog = cog
-        
+
+        # Button 1: Song
+        song_button = discord.ui.Button(label="Song", style=discord.ButtonStyle.primary, custom_id="player_song")
+        song_button.callback = self.on_song
+        self.add_item(song_button)
+
+        # Button 2: Play/Pause (Dynamic)
         play_pause_button = discord.ui.Button(
-            style=discord.ButtonStyle.danger if is_playing else discord.ButtonStyle.success,
             label="Pause" if is_playing else "Play",
+            style=discord.ButtonStyle.secondary,  # Always grey
             custom_id="player_pause_toggle"
         )
         play_pause_button.callback = self.on_play_pause
         self.add_item(play_pause_button)
 
-    @discord.ui.button(label="Song", style=discord.ButtonStyle.primary, custom_id="player_song")
-    async def on_song(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Button 3: Skip
+        skip_button = discord.ui.Button(label="Skip", style=discord.ButtonStyle.secondary, custom_id="player_skip")
+        skip_button.callback = self.on_skip
+        self.add_item(skip_button)
+
+        # Button 4: Stop
+        stop_button = discord.ui.Button(label="Stop", style=discord.ButtonStyle.danger, custom_id="player_stop")
+        stop_button.callback = self.on_stop
+        self.add_item(stop_button)
+
+    async def on_song(self, interaction: discord.Interaction):
         await interaction.response.send_modal(PlayerPlayModal(self.cog))
 
     async def on_play_pause(self, interaction: discord.Interaction):
         await self.cog._invoke_audio_command(interaction, "pause")
 
-    @discord.ui.button(label="Skip", style=discord.ButtonStyle.secondary, custom_id="player_skip")
-    async def on_skip(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def on_skip(self, interaction: discord.Interaction):
         await self.cog._invoke_audio_command(interaction, "skip")
 
-    @discord.ui.button(label="Stop", style=discord.ButtonStyle.danger, custom_id="player_stop")
-    async def on_stop(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def on_stop(self, interaction: discord.Interaction):
         await self.cog._invoke_audio_command(interaction, "stop")
 
 
@@ -117,6 +129,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             is_enabled=False,
         )
         self.settings_view = SettingsView(self)
+        # Add a base view for cog loading; it will be replaced by dynamic ones
         self.player_view = PlayerView(self, is_playing=False)
 
     async def cog_load(self):
@@ -239,12 +252,11 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         vc_id = await self.config.guild(message.guild).music_voice_channel_id()
         player_message_id = await self.config.guild(message.guild).player_message_id()
 
-        # Check if the message is in the configured music channel and is not the player message
         if message.channel.id == vc_id and message.id != player_message_id:
             try:
                 await message.delete()
             except (discord.Forbidden, discord.NotFound):
-                pass # Ignore if we can't delete it
+                pass
 
     async def _invoke_audio_command(self, interaction: discord.Interaction, command_name: str, *, query: str = None):
         await interaction.response.defer(ephemeral=True, thinking=True)
