@@ -171,7 +171,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         
         await message.edit(embed=embed, view=self.settings_view)
 
-    async def _update_player_message(self, guild: discord.Guild, is_playing: bool):
+    async def _update_player_message(self, guild: discord.Guild):
         player_message_id = await self.config.guild(guild).player_message_id()
         vc_id = await self.config.guild(guild).music_voice_channel_id()
         
@@ -182,13 +182,14 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         try:
             message = await channel.fetch_message(player_message_id)
             player = lavalink.get_player(guild.id)
+            
+            # This is the single source of truth for the player's state.
+            is_playing = player and player.is_playing and not player.paused
+
             embed = discord.Embed(title="Music Player", color=discord.Color.green())
 
             if player and player.current:
-                artist = player.current.author
-                if artist.startswith("NFrealmusic - "):
-                    artist = artist.replace("NFrealmusic - ", "")
-                
+                artist = player.current.author.replace("NFrealmusic - ", "")
                 embed.add_field(name="Now Playing", value=f"{artist} - {player.current.title}", inline=False)
                 if player.current.thumbnail:
                     embed.set_thumbnail(url=player.current.thumbnail)
@@ -208,29 +209,27 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
     @commands.Cog.listener("on_red_audio_track_start")
     async def on_track_start(self, guild, track, requester):
-        await self._update_player_message(guild, is_playing=True)
+        await self._update_player_message(guild)
 
     @commands.Cog.listener("on_red_audio_track_pause")
     async def on_track_pause(self, guild, track, requester):
-        await self._update_player_message(guild, is_playing=False)
+        await self._update_player_message(guild)
         
     @commands.Cog.listener("on_red_audio_track_resume")
     async def on_track_resume(self, guild, track, requester):
-        await self._update_player_message(guild, is_playing=True)
+        await self._update_player_message(guild)
 
     @commands.Cog.listener("on_red_audio_player_stop")
     async def on_player_stop(self, guild, track, requester):
-        await self._update_player_message(guild, is_playing=False)
+        await self._update_player_message(guild)
         
     @commands.Cog.listener("on_red_audio_queue_end")
     async def on_queue_end(self, guild, track, requester):
-        await self._update_player_message(guild, is_playing=False)
+        await self._update_player_message(guild)
 
     @commands.Cog.listener("on_red_audio_track_add")
     async def on_track_add(self, guild, track, requester):
-        player = lavalink.get_player(guild.id)
-        is_currently_playing = player.is_playing and not player.paused
-        await self._update_player_message(guild, is_playing=is_currently_playing)
+        await self._update_player_message(guild)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
