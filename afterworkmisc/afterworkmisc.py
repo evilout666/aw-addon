@@ -59,9 +59,9 @@ async def _apply_perms_to_channel(cog: commands.Cog, channel: discord.abc.GuildC
 async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: discord.Embed):
     """Refreshes the configuration data shown in the setup embed."""
     settings = await cog.config.guild(guild).all()
-    channel_id = settings.get('managed_channel_id') # Uses new key
+    channel_id = settings.get('managed_channel_id')
     
-    is_hidden = await cog._is_managed_channel_hidden(guild) # Uses new function
+    is_hidden = await cog._is_managed_channel_hidden(guild)
     status_display = "🔴 Hidden" if is_hidden else "🟢 Visible"
 
     managed_channel = guild.get_channel(channel_id)
@@ -76,7 +76,7 @@ async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: di
 
 # --- MODALS ---
 
-class ChannelIDModal(discord.ui.Modal, title="Set Managed Channel ID"):
+class CategoryIDModal(discord.ui.Modal, title="Set Managed Category ID"):
     channel_id_input = discord.ui.TextInput(label="Channel ID", style=discord.TextStyle.short, placeholder="Paste the ID of the channel to manage.", required=True, max_length=20)
 
     def __init__(self, cog: commands.Cog, original_message: discord.Message):
@@ -85,27 +85,25 @@ class ChannelIDModal(discord.ui.Modal, title="Set Managed Channel ID"):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
         input_id = self.channel_id_input.value.strip()
-        try: 
-            new_channel_id = int(input_id)
+        try: channel_id = int(input_id)
         except ValueError: 
             return await interaction.followup.send("❌ **Error:** Input must be a valid Channel ID.", ephemeral=True)
         
-        new_channel = interaction.guild.get_channel(new_channel_id)
-        if not new_channel or new_channel.type == discord.ChannelType.category:
-            return await interaction.followup.send(f"❌ **Error:** Could not find a Text or Voice Channel with the ID `{new_channel_id}`.", ephemeral=True)
+        channel = interaction.guild.get_channel(channel_id)
+        if not channel or channel.type == discord.ChannelType.category:
+            return await interaction.followup.send(f"❌ **Error:** Could not find a Text or Voice Channel with the ID `{channel_id}`.", ephemeral=True)
 
         # --- REVERSION LOGIC ---
         old_channel_id = await self.cog.config.guild(interaction.guild).managed_channel_id()
-        if old_channel_id and old_channel_id != new_channel_id:
+        if old_channel_id and old_channel_id != channel_id:
             old_channel = interaction.guild.get_channel(old_channel_id)
             if old_channel:
-                # Revert permissions on the old channel (overwrite=None)
                 revert_action = lambda ch, role, view_channel, reason: ch.set_permissions(role, overwrite=None, reason=reason)
                 await _apply_perms_to_channel(self.cog, old_channel, revert_action)
                 log.info(f"Reverted permissions on old channel {old_channel.name} ({old_channel_id}).")
 
         # --- SAVE NEW CHANNEL ---
-        await self.cog.config.guild(interaction.guild).managed_channel_id.set(new_channel_id)
+        await self.cog.config.guild(interaction.guild).managed_channel_id.set(channel_id)
         
         embed = self.original_message.embeds[0]
         embed.set_footer(text=_get_admin_footer(interaction, "Channel updated"))
@@ -113,7 +111,7 @@ class ChannelIDModal(discord.ui.Modal, title="Set Managed Channel ID"):
         
         initial_hidden = await self.cog._is_managed_channel_hidden(interaction.guild)
         view = SetupView(self.cog, initial_hidden=initial_hidden) 
-        await self.original_message.edit(embed=embed, view=view)
+        await interaction.followup.edit_message(embed=embed, view=view)
 
 
 # --- VIEW ---
@@ -130,7 +128,7 @@ class SetupView(discord.ui.View):
     async def set_category_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): 
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
-        await interaction.response.send_modal(ChannelIDModal(self.cog, interaction.message))
+        await interaction.response.send_modal(CategoryIDModal(self.cog, interaction.message))
 
     @discord.ui.button(label="Hide / Show", style=discord.ButtonStyle.secondary, custom_id="misc_show_hide_button", row=0)
     async def toggle_visibility_action(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -161,7 +159,6 @@ class SetupView(discord.ui.View):
             new_button_label = "Show"
             new_button_style = discord.ButtonStyle.success
         
-        # Apply perms to the single channel
         await _apply_perms_to_channel(self.cog, channel, perm_action) 
         
         button.label = new_button_label
@@ -172,9 +169,8 @@ class SetupView(discord.ui.View):
         embed.set_footer(text=_get_admin_footer(interaction, status_msg))
         
         await _update_setup_embed(self.cog, interaction.guild, embed)
-        await interaction.message.edit(embed=embed, view=self)
-        
-        # Success message removed
+        await interaction.followup.edit_message(embed=embed, view=self)
+
 
 # --- MAIN COG CLASS ---
 
@@ -183,7 +179,7 @@ class AfterworkMisc(commands.Cog, name="AfterworkMisc"):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=246813579, force_registration=True)
         self.config.register_guild(
-            managed_channel_id=None, # Changed from managed_category_id
+            managed_channel_id=None,
             setup_message_id=None
         )
 
