@@ -79,11 +79,13 @@ class NamedChannelSetModal(discord.ui.Modal, title="Set or Update a Named Channe
         try:
             channel_id = int(self.channel_id_input.value.strip())
         except ValueError:
-            return await interaction.followup.send("❌ **Error:** Channel ID must be a valid number.", ephemeral=False)
+            # User error: Invalid ID input
+            return await interaction.followup.send("❌ **Error:** Channel ID must be a valid number.", ephemeral=True)
             
         channel = interaction.guild.get_channel(channel_id)
         if not channel or not isinstance(channel, discord.TextChannel):
-            return await interaction.followup.send(f"❌ **Error:** Could not find a Text Channel with the ID `{channel_id}`.", ephemeral=False)
+            # User error: Channel not found or not a text channel
+            return await interaction.followup.send(f"❌ **Error:** Could not find a Text Channel with the ID `{channel_id}`.", ephemeral=True)
 
         async with self.cog.config.guild(interaction.guild).named_channels() as channels:
             channels[name] = channel_id
@@ -93,7 +95,7 @@ class NamedChannelSetModal(discord.ui.Modal, title="Set or Update a Named Channe
         await _update_setup_embed(self.cog, interaction.guild, embed)
         
         await self.original_message.edit(embed=embed, view=SetupView(self.cog))
-        await interaction.followup.send(f"✅ Channel **{name}** is now set to {channel.mention}.", ephemeral=True)
+        # Success message removed
 
 class NamedMessageSendModal(discord.ui.Modal, title="Send Embed to Named Channel"):
     name_input = discord.ui.TextInput(label="Configuration Name", style=discord.TextStyle.short, placeholder="The name of the saved channel (e.g., 'announcements').", required=True, max_length=50)
@@ -110,23 +112,24 @@ class NamedMessageSendModal(discord.ui.Modal, title="Send Embed to Named Channel
         channel_id = settings.get('named_channels', {}).get(name)
         
         if not channel_id:
-            return await interaction.followup.send(f"❌ **Error:** No channel found with the name `{name}`.", ephemeral=False)
+            return await interaction.followup.send(f"❌ **Error:** No channel found with the name `{name}`.", ephemeral=True)
         
         target_channel = interaction.guild.get_channel(channel_id)
         if not target_channel:
-            return await interaction.followup.send(f"❌ **Error:** The channel for `{name}` is invalid or has been deleted.", ephemeral=False)
+            return await interaction.followup.send(f"❌ **Error:** The channel for `{name}` is invalid or has been deleted.", ephemeral=True)
             
         try:
             embed_data = json.loads(self.json_input.value.strip())
             embed = discord.Embed.from_dict(embed_data)
             await target_channel.send(embed=embed)
             await self.cog.config.guild(interaction.guild).json_payload.set(self.json_input.value.strip())
-            await interaction.followup.send(f"✅ Embed sent successfully to **{name}** ({target_channel.mention}).", ephemeral=True)
+            # Success confirmation removed
         except (json.JSONDecodeError, ValueError):
-            return await interaction.followup.send("❌ **Error:** Invalid JSON payload provided.", ephemeral=False)
+            return await interaction.followup.send("❌ **Error:** Invalid JSON payload provided.", ephemeral=True)
         except Exception as e:
-            await _send_owner_dm(self.cog.bot, f"Failed to send embed to {target_channel.mention}: {e}")
-            return await interaction.followup.send("❌ **Error:** Failed to send embed. Bot may lack permissions.", ephemeral=False)
+            # System error: Send to owner via DM
+            await _send_owner_dm(self.cog.bot, f"Failed to send embed to {target_channel.mention} in {interaction.guild.name}: {e}")
+            return await interaction.followup.send("❌ **Error:** Failed to send embed. Check DMs for details.", ephemeral=True)
 
 class RemoveChannelModal(discord.ui.Modal, title="Remove Named Channel"):
     name_input = discord.ui.TextInput(label="Configuration Name to Remove", style=discord.TextStyle.short, required=True, max_length=50)
@@ -140,7 +143,8 @@ class RemoveChannelModal(discord.ui.Modal, title="Remove Named Channel"):
 
         async with self.cog.config.guild(interaction.guild).named_channels() as channels:
             if name not in channels:
-                return await interaction.followup.send(f"❌ **Error:** No channel configuration found with the name `{name}`.", ephemeral=False)
+                # User error: Channel name not found
+                return await interaction.followup.send(f"❌ **Error:** No channel configuration found with the name `{name}`.", ephemeral=True)
             del channels[name]
 
         embed = self.original_message.embeds[0]
@@ -148,7 +152,7 @@ class RemoveChannelModal(discord.ui.Modal, title="Remove Named Channel"):
         await _update_setup_embed(self.cog, interaction.guild, embed)
         
         await self.original_message.edit(embed=embed, view=SetupView(self.cog))
-        await interaction.followup.send(f"✅ Channel configuration **{name}** has been removed.", ephemeral=True)
+        # Success confirmation removed
 
 
 # --- VIEW (The Persistent Setup Hub) ---
@@ -161,13 +165,13 @@ class SetupView(discord.ui.View):
     @discord.ui.button(label="Set Named Channel", style=discord.ButtonStyle.primary, custom_id="embed_set_channel_button", row=0)
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): 
-            return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         await interaction.response.send_modal(NamedChannelSetModal(self.cog, interaction.message))
 
     @discord.ui.button(label="Send Embed", style=discord.ButtonStyle.success, custom_id="embed_send_message_button", row=0)
     async def send_message_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): 
-            return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
             
         modal = NamedMessageSendModal(self.cog, interaction.message)
         modal.json_input.default = await self.cog.config.guild(interaction.guild).json_payload()
@@ -176,7 +180,7 @@ class SetupView(discord.ui.View):
     @discord.ui.button(label="Remove Named Channel", style=discord.ButtonStyle.danger, custom_id="embed_remove_channel", row=0)
     async def remove_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): 
-            return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         await interaction.response.send_modal(RemoveChannelModal(self.cog, interaction.message))
 
 # --- MAIN COG CLASS ---
@@ -242,4 +246,3 @@ async def setup(bot):
     cog = AfterworkEmbed(bot) 
     await cog.initialize()
     await bot.add_cog(cog)
-
