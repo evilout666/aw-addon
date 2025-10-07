@@ -15,8 +15,10 @@ def _get_admin_footer(obj: Union[commands.Context, discord.Interaction], status_
     Handles both Context (from commands) and Interaction (from buttons/modals).
     """
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # Check if the object is a Context from a text command
     if isinstance(obj, commands.Context):
         user_display_name = obj.author.display_name
+    # Otherwise, assume it's an Interaction from a button/modal
     else:
         user_display_name = obj.user.display_name
     return f"e.Network | {status_action} by {user_display_name} {current_time}"
@@ -130,10 +132,7 @@ class AfterworkAudio(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=6677889900, force_registration=True)
-        self.config.register_guild(
-            setup_message_id=None,
-            now_playing_message_id=None
-        )
+        self.config.register_guild(setup_message_id=None)
 
     async def initialize(self):
         guilds_data = await self.config.all_guilds()
@@ -158,17 +157,13 @@ class AfterworkAudio(commands.Cog):
         if not ctx.channel.permissions_for(bot_member).manage_messages:
             return await _send_owner_dm(self.bot, f"Config failed in **{ctx.guild.name}**. Need Send/Manage Messages in **#{ctx.channel.name}**.")
 
-        # Cleanup old messages
-        old_setup_id = await self.config.guild(ctx.guild).setup_message_id()
-        if old_setup_id:
+        old_message_id = await self.config.guild(ctx.guild).setup_message_id()
+        if old_message_id:
             try:
-                await ctx.channel.fetch_message(old_setup_id).delete()
-            except discord.HTTPException: pass
-        
-        old_np_id = await self.config.guild(ctx.guild).now_playing_message_id()
-        if old_np_id:
-            try:
-                await ctx.channel.fetch_message(old_np_id).delete()
+                # --- FIX APPLIED HERE ---
+                old_message = await ctx.channel.fetch_message(old_message_id)
+                await old_message.delete()
+                # --- END FIX ---
             except discord.HTTPException: pass
         
         embed = discord.Embed(
@@ -192,78 +187,6 @@ class AfterworkAudio(commands.Cog):
                     await message.delete()
                     break
         except Exception: pass
-
-    # --- AUDIO EVENT LISTENERS ---
-
-    @commands.Cog.listener()
-    async def on_red_audio_track_start(self, guild: discord.Guild, track, requester: discord.Member):
-        """Event listener for when a new track starts playing."""
-        setup_message_id = await self.config.guild(guild).setup_message_id()
-        if not setup_message_id:
-            return
-
-        try:
-            # We need the channel where the hub is located
-            hub_message = await self.bot.http.get_message(self.bot.get_channel_for_message_id(setup_message_id), setup_message_id)
-            channel = self.bot.get_channel(hub_message['channel_id'])
-            if not channel: return
-        except (discord.NotFound, discord.Forbidden):
-            return
-
-        np_embed = discord.Embed(
-            title=track.title,
-            description=f"by {track.author}",
-            color=await self.bot.get_embed_color(channel)
-        )
-        if track.thumbnail:
-            np_embed.set_thumbnail(url=track.thumbnail)
-        
-        np_message_id = await self.config.guild(guild).now_playing_message_id()
-        
-        try:
-            if np_message_id:
-                # Edit the existing "Now Playing" message
-                np_message = await channel.fetch_message(np_message_id)
-                await np_message.edit(embed=np_embed)
-            else:
-                # Post a new "Now Playing" message
-                new_np_message = await channel.send(embed=np_embed)
-                await self.config.guild(guild).now_playing_message_id.set(new_np_message.id)
-        except (discord.NotFound, discord.Forbidden):
-            # If message was deleted, post a new one
-            new_np_message = await channel.send(embed=np_embed)
-            await self.config.guild(guild).now_playing_message_id.set(new_np_message.id)
-        except Exception as e:
-            log.error(f"Error updating Now Playing message: {e}", exc_info=True)
-
-
-    @commands.Cog.listener()
-    async def on_red_audio_queue_end(self, guild: discord.Guild, track, requester: discord.Member):
-        """Event listener for when the queue finishes."""
-        await self._cleanup_now_playing(guild)
-
-    @commands.Cog.listener()
-    async def on_red_audio_player_stop(self, guild: discord.Guild, track):
-        """Event listener for when the player is stopped manually."""
-        await self._cleanup_now_playing(guild)
-        
-    async def _cleanup_now_playing(self, guild: discord.Guild):
-        """Helper to delete the 'Now Playing' message."""
-        np_message_id = await self.config.guild(guild).now_playing_message_id()
-        setup_message_id = await self.config.guild(guild).setup_message_id()
-
-        if np_message_id and setup_message_id:
-            try:
-                hub_message = await self.bot.http.get_message(self.bot.get_channel_for_message_id(setup_message_id), setup_message_id)
-                channel = self.bot.get_channel(hub_message['channel_id'])
-                if channel:
-                    message = await channel.fetch_message(np_message_id)
-                    await message.delete()
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                pass # Message already gone or permissions lost
-            finally:
-                await self.config.guild(guild).now_playing_message_id.set(None)
-
 
 async def setup(bot):
     cog = AfterworkAudio(bot)
