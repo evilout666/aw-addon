@@ -15,8 +15,10 @@ def _get_admin_footer(obj: Union[commands.Context, discord.Interaction], status_
     Handles both Context (from commands) and Interaction (from buttons/modals).
     """
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # Check if the object is a Context from a text command
     if isinstance(obj, commands.Context):
         user_display_name = obj.author.display_name
+    # Otherwise, assume it's an Interaction from a button/modal
     else:
         user_display_name = obj.user.display_name
     return f"e.Network | {status_action} by {user_display_name} {current_time}"
@@ -163,7 +165,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         old_setup_id = await self.config.guild(ctx.guild).setup_message_id()
         if old_setup_id:
             try:
-                # FIX: Correctly await fetch and delete
+                # FIX 1: Correctly await fetch and delete (resolves deployment crash)
                 old_message = await ctx.channel.fetch_message(old_setup_id)
                 await old_message.delete()
             except discord.HTTPException: pass
