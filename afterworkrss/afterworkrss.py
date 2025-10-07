@@ -216,8 +216,8 @@ class SetupView(discord.ui.View):
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed, view=self)
         
-        # Acknowledge the thinking state and clear it by silent followup deferral
-        await interaction.followup.defer()
+        # FIX: Remove incorrect followup.defer() as it causes the AttributeError
+        # The message.edit above already replaces the 'thinking' state.
 
 # --- MAIN COG CLASS ---
 
