@@ -15,10 +15,8 @@ def _get_admin_footer(obj: Union[commands.Context, discord.Interaction], status_
     Handles both Context (from commands) and Interaction (from buttons/modals).
     """
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    # Check if the object is a Context from a text command
     if isinstance(obj, commands.Context):
         user_display_name = obj.author.display_name
-    # Otherwise, assume it's an Interaction from a button/modal
     else:
         user_display_name = obj.user.display_name
     return f"e.Network | {status_action} by {user_display_name} {current_time}"
