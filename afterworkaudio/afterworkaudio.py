@@ -214,10 +214,12 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
     @commands.Cog.listener("on_red_audio_track_pause")
     async def on_track_pause(self, guild, track, requester):
+        await asyncio.sleep(0.1)
         await self._update_player_message(guild)
         
     @commands.Cog.listener("on_red_audio_track_resume")
     async def on_track_resume(self, guild, track, requester):
+        await asyncio.sleep(0.1)
         await self._update_player_message(guild)
 
     @commands.Cog.listener("on_red_audio_player_stop")
@@ -289,9 +291,8 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             message.content = original_content
             message.author = original_author
             
-            # This is the new, more robust fix.
             if command_name == "pause":
-                await asyncio.sleep(0.5) # Give Lavalink a moment to process the state change
+                await asyncio.sleep(0.5)
                 await self._update_player_message(interaction.guild)
 
         except Exception as e:
@@ -305,7 +306,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         if not ctx.invoked_subcommand: await ctx.send_help()
 
     @afterworkaudio_group.command(name="deploy")
-    async def afterworkaudio_deploy(self, ctx: commands....):
+    async def afterworkaudio_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel."""
         settings = await self.config.guild(ctx.guild).all()
         is_enabled = settings.get('is_enabled', False)
