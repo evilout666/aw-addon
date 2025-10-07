@@ -110,7 +110,7 @@ class AddFeedModal(discord.ui.Modal, title="Add New RSS Feed"):
         embed.set_footer(text=_get_admin_footer(interaction, f"Feed '{name}' added"))
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await self.original_message.edit(embed=embed, view=SetupView(self.cog, initial_enabled=await self.cog.config.guild(interaction.guild).enabled()))
-        await interaction.followup.defer()
+        # The thinking state is implicitly cleared by the message edit
         
 
 class RemoveFeedModal(discord.ui.Modal, title="Remove RSS Feed"):
@@ -138,7 +138,7 @@ class RemoveFeedModal(discord.ui.Modal, title="Remove RSS Feed"):
         embed.set_footer(text=_get_admin_footer(interaction, f"Feed '{name_to_remove}' removed"))
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await self.original_message.edit(embed=embed, view=SetupView(self.cog, initial_enabled=await self.cog.config.guild(interaction.guild).enabled()))
-        await interaction.followup.defer()
+        # The thinking state is implicitly cleared by the message edit
 
 
 class AddFilterModal(discord.ui.Modal, title="Add Content Filter"):
@@ -163,7 +163,7 @@ class AddFilterModal(discord.ui.Modal, title="Add Content Filter"):
         embed.set_footer(text=_get_admin_footer(interaction, f"Filter added"))
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await self.original_message.edit(embed=embed, view=SetupView(self.cog, initial_enabled=await self.cog.config.guild(interaction.guild).enabled()))
-        await interaction.followup.defer()
+        # The thinking state is implicitly cleared by the message edit
 
 # --- VIEW (The Persistent Setup Hub) ---
 
@@ -216,7 +216,7 @@ class SetupView(discord.ui.View):
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed, view=self)
         
-        # Acknowledge the thinking state
+        # Acknowledge the thinking state and clear it by silent followup deferral
         await interaction.followup.defer()
 
 # --- MAIN COG CLASS ---
