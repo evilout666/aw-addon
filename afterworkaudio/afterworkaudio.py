@@ -270,9 +270,8 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             await self._cleanup_player(guild)
             embed = discord.Embed(title="Music Player", description="Use the 'Song' button to request a track.", color=discord.Color.green())
             try:
-                player = lavalink.get_player(guild.id)
-                initial_shuffle = player.shuffle if player else False
-                initial_view = PlayerView(self, is_playing=False, is_shuffling=initial_shuffle)
+                # Always create a default view when a new session starts.
+                initial_view = PlayerView(self, is_playing=False, is_shuffling=False)
                 player_message = await voice_channel.send(embed=embed, view=initial_view)
                 await self.config.guild(guild).player_message_id.set(player_message.id)
             except discord.Forbidden: log.error(f"Missing permissions to send messages in {voice_channel.name}")
@@ -299,7 +298,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
     async def _invoke_audio_command(self, interaction: discord.Interaction, command_name: str, *, query: str = None):
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.voice:
-            return await interaction.followup.send("❌ You must be in a voice channel.", ephemeral=False)
+            return await interaction.followup.send("❌ You must be in a voice channel.", ephemeral=True)
 
         try:
             message = interaction.message
@@ -321,7 +320,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
         except Exception as e:
             log.error(f"Error invoking '{command_name}': {e}", exc_info=True)
-            await interaction.followup.send("❌ An error occurred.", ephemeral=False)
+            await interaction.followup.send("❌ An error occurred.", ephemeral=True)
 
     @commands.group(name="afterworkaudio")
     @commands.admin_or_permissions(manage_guild=True)
@@ -357,13 +356,16 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
         msg = await ctx.send(embed=embed, view=self.settings_view)
         await self.config.guild(ctx.guild).settings_message_id.set(msg.id)
-
+        
         try:
             await msg.pin(reason="Afterwork Audio Control Panel")
         except discord.Forbidden:
             log.warning(f"Could not pin the settings message in {ctx.channel.name}.")
         
-        await ctx.message.delete()
+        try:
+            await ctx.message.delete()
+        except (discord.NotFound, discord.Forbidden):
+            pass
         
         await asyncio.sleep(1)
         try:
