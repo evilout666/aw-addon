@@ -15,10 +15,8 @@ def _get_admin_footer(obj: Union[commands.Context, discord.Interaction], status_
     Handles both Context (from commands) and Interaction (from buttons/modals).
     """
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    # Check if the object is a Context from a text command
     if isinstance(obj, commands.Context):
         user_display_name = obj.author.display_name
-    # Otherwise, assume it's an Interaction from a button/modal
     else:
         user_display_name = obj.user.display_name
     return f"e.Network | {status_action} by {user_display_name} {current_time}"
@@ -60,16 +58,18 @@ class PlayModal(discord.ui.Modal, title="Play Music (URL or Search)"):
             return await interaction.followup.send("❌ You must be in a voice channel to play music.", ephemeral=False)
 
         try:
-            message = await interaction.channel.fetch_message(interaction.message.id)
-            ctx = await self.cog.bot.get_context(message)
-            ctx.author = interaction.user
-            
-            play_command = self.cog.bot.get_command("play")
-            if not play_command:
-                return await interaction.followup.send("❌ Could not find the `play` command.", ephemeral=False)
+            # Create a fake message to process
+            prefix = (await self.cog.bot.get_prefix(interaction.message))[0]
+            fake_message_content = f"{prefix}play {query}"
+            fake_message = discord.Object(id=interaction.message.id)
+            fake_message.content = fake_message_content
+            fake_message.author = interaction.user
+            fake_message.channel = interaction.channel
+            fake_message.guild = interaction.guild
 
-            await play_command(ctx, query=query)
-            await interaction.followup.send(f"✅ Queued up: `{query}`.", ephemeral=True)
+            # Process the command as if the user typed it
+            await self.cog.bot.process_commands(fake_message)
+            await interaction.followup.send(f"✅ Play command sent for `{query}`. Please wait for the audio player to respond.", ephemeral=True)
             
         except Exception as e:
             log.error(f"Error during play command invocation: {e}", exc_info=True)
@@ -93,15 +93,17 @@ class AudioControls(discord.ui.View):
             return await interaction.followup.send("❌ You must be in a voice channel to control playback.", ephemeral=False)
         
         try:
-            message = await interaction.channel.fetch_message(interaction.message.id)
-            ctx = await self.cog.bot.get_context(message)
-            ctx.author = interaction.user
+            # Create a fake message to process
+            prefix = (await self.cog.bot.get_prefix(interaction.message))[0]
+            fake_message_content = f"{prefix}{command_name}"
+            fake_message = discord.Object(id=interaction.message.id)
+            fake_message.content = fake_message_content
+            fake_message.author = interaction.user
+            fake_message.channel = interaction.channel
+            fake_message.guild = interaction.guild
 
-            command_obj = self.cog.bot.get_command(command_name)
-            if not command_obj:
-                 return await interaction.followup.send(f"❌ Command `{command_name}` not found.", ephemeral=False)
-            
-            await command_obj(ctx)
+            # Process the command as if the user typed it
+            await self.cog.bot.process_commands(fake_message)
             await interaction.followup.send(f"✅ Executed `{command_name}` command.", ephemeral=True)
             
         except Exception as e:
@@ -160,16 +162,19 @@ class AfterworkAudio(commands.Cog):
         old_message_id = await self.config.guild(ctx.guild).setup_message_id()
         if old_message_id:
             try:
-                # --- FIX APPLIED HERE ---
                 old_message = await ctx.channel.fetch_message(old_message_id)
                 await old_message.delete()
-                # --- END FIX ---
             except discord.HTTPException: pass
         
         embed = discord.Embed(
             title="Music Player",
             description="Use these buttons to control music playback.",
             color=await ctx.embed_color()
+        )
+        embed.add_field(
+            name="⚠️ Important",
+            value="This panel requires the main `Audio` cog to be fully configured. For services like Spotify, you must set the appropriate API keys in Red's global settings (`[p]audioset spotifyapi`).",
+            inline=False
         )
         embed.set_footer(text=_get_admin_footer(ctx, "Audio Control Hub Deployed"))
         
