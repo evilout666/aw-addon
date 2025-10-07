@@ -217,9 +217,10 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             embed = discord.Embed(title="Music Controls", description="Session started! Use buttons to control music.", color=discord.Color.green())
             try:
                 player_message = await voice_channel.send(embed=embed, view=self.player_view)
-                await player_message.pin(reason="Active Music Session")
+                # The following line is removed as you cannot pin messages in a voice channel's chat.
+                # await player_message.pin(reason="Active Music Session")
                 await self.config.guild(guild).player_message_id.set(player_message.id)
-            except discord.Forbidden: log.error(f"Missing permissions to send/pin in {voice_channel.name}")
+            except discord.Forbidden: log.error(f"Missing permissions to send messages in {voice_channel.name}")
 
         if before.channel and before.channel.id == voice_channel_id and not before.channel.members:
             await self._cleanup_player(guild, voice_channel_id)
@@ -231,12 +232,15 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         command = self.bot.get_command(command_name)
         if not command: return await interaction.followup.send(f"❌ Command not found.", ephemeral=False)
         try:
-            # Create context from the message the interaction is attached to
             ctx = await self.bot.get_context(interaction.message)
-            # Override the author to be the user who clicked the button
             ctx.author = interaction.user
             
-            await command.invoke(ctx, *([query] if query else []))
+            # This is the corrected way to invoke the command with an optional keyword argument.
+            if query:
+                await command.invoke(ctx, query=query)
+            else:
+                await command.invoke(ctx)
+                
             await interaction.followup.send(f"✅ Executed `{command_name}`.", ephemeral=True)
         except Exception as e:
             log.error(f"Error invoking '{command_name}': {e}", exc_info=True)
