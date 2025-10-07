@@ -3,6 +3,7 @@ from redbot.core import commands, Config
 import logging
 from typing import Optional
 import lavalink
+import asyncio
 
 log = logging.getLogger("red.AfterworkAudio")
 
@@ -182,21 +183,18 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         try:
             message = await channel.fetch_message(player_message_id)
             player = lavalink.get_player(guild.id)
+            
             is_playing = player and player.is_playing and not player.paused
+
             embed = discord.Embed(title="Music Player", color=discord.Color.green())
 
             if player and player.current:
                 artist = player.current.author.replace("NFrealmusic - ", "").strip()
                 title = player.current.title
-                
-                # If the title starts with the artist name, remove it to avoid duplication
                 if title.lower().startswith(artist.lower()):
-                    # Find the separator (usually ' - ') and slice the string
                     separator_pos = title.lower().find(artist.lower()) + len(artist)
-                    # Look for a separator like ' - '
                     if ' - ' in title[separator_pos:separator_pos+4]:
                          title = title[separator_pos:].lstrip(' -')
-
                 embed.add_field(name="Now Playing", value=f"{artist} - {title}", inline=False)
             
             if player and player.queue:
@@ -218,10 +216,12 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
     @commands.Cog.listener("on_red_audio_track_pause")
     async def on_track_pause(self, guild, track, requester):
+        await asyncio.sleep(0.1) # Add delay to prevent race condition
         await self._update_player_message(guild)
         
     @commands.Cog.listener("on_red_audio_track_resume")
     async def on_track_resume(self, guild, track, requester):
+        await asyncio.sleep(0.1) # Add delay to prevent race condition
         await self._update_player_message(guild)
 
     @commands.Cog.listener("on_red_audio_player_stop")
