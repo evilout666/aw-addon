@@ -212,7 +212,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         if not setup_message_id: return None
         
         try:
-            # Use fetch_message to get the channel object from the message ID
+            # Use HTTP call to get the channel ID reliably
             message = await self.bot.http.get_message(guild.id, setup_message_id)
             return self.bot.get_channel(int(message['channel_id']))
         except Exception:
@@ -236,15 +236,12 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         
         try:
             if np_message_id:
-                # Edit the existing "Now Playing" message
                 np_message = await channel.fetch_message(np_message_id)
                 await np_message.edit(embed=np_embed)
             else:
-                # Post a new "Now Playing" message
                 new_np_message = await channel.send(embed=np_embed)
                 await self.config.guild(guild).now_playing_message_id.set(new_np_message.id)
         except Exception:
-            # If fetch/edit failed for any reason, try posting a new one
             new_np_message = await channel.send(embed=np_embed)
             await self.config.guild(guild).now_playing_message_id.set(new_np_message.id)
 
@@ -273,7 +270,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             message = await channel.fetch_message(np_message_id)
             await message.delete()
         except discord.NotFound:
-            pass # Message already gone
+            pass
         except discord.Forbidden:
             log.warning(f"Failed to delete Now Playing message in {guild.name} due to permissions.")
         finally:
