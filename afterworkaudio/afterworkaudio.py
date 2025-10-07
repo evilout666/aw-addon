@@ -1,7 +1,7 @@
 import discord
 from redbot.core import commands, Config
 import logging
-from typing import Optional
+from typing import Optional, List
 import lavalink
 import asyncio
 import re
@@ -49,6 +49,28 @@ class SetVoiceChannelModal(discord.ui.Modal, title="Set Music Channel"):
         await self.cog.config.guild(interaction.guild).music_voice_channel_id.set(channel.id)
         await interaction.response.defer(ephemeral=True)
         await self.cog.update_settings_message(interaction.guild, interaction.message)
+
+
+class AddFilterModal(discord.ui.Modal, title="Add a Title Filter"):
+    filter_text = discord.ui.TextInput(label="Text to Hide", placeholder="e.g., Fueled By Ramen, OFFICIAL VIDEO", required=True)
+
+    def __init__(self, cog):
+        super().__init__()
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        text_to_hide = self.filter_text.value.strip()
+        if not text_to_hide:
+            return await interaction.response.send_message("❌ Filter cannot be empty.", ephemeral=True)
+
+        async with self.cog.config.guild(interaction.guild).filters() as filters:
+            if text_to_hide.lower() not in [f.lower() for f in filters]:
+                filters.append(text_to_hide)
+                await interaction.response.send_message(f"✅ Filter `{text_to_hide}` added.", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"⚠️ Filter `{text_to_hide}` already exists.", ephemeral=True)
+        
+        await self.cog._update_player_message(interaction.guild)
 
 
 class PlayerPlayModal(discord.ui.Modal, title="Request a Song"):
@@ -118,6 +140,10 @@ class SettingsView(discord.ui.View):
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(SetVoiceChannelModal(self.cog))
 
+    @discord.ui.button(label="Hide", style=discord.ButtonStyle.secondary, custom_id="add_filter")
+    async def add_filter_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(AddFilterModal(self.cog))
+
     @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.grey, custom_id="toggle_automation")
     async def toggle_automation_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         current_state = await self.cog.config.guild(interaction.guild).is_enabled()
@@ -141,6 +167,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             settings_message_id=None,
             player_message_id=None,
             is_enabled=False,
+            filters=[],
         )
         self.settings_view = SettingsView(self)
         self.player_view = PlayerView(self)
@@ -149,21 +176,30 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         self.bot.add_view(self.settings_view)
         self.bot.add_view(self.player_view)
 
-    def _format_title(self, author: str, title: str) -> str:
+    def _format_title(self, author: str, title: str, filters: List[str]) -> str:
         """Helper to clean up and format song titles."""
-        # Clean artist name first, in case it's in the title
-        artist = author.replace("NFrealmusic - ", "").strip()
+        artist = author
         
-        # If the title already starts with the artist, just clean the title
-        if title.lower().startswith(artist.lower()):
-            clean_title = title[len(artist):].lstrip(" -–:").strip()
-        else:
-            clean_title = title
-            
-        # Remove common junk from the end of the title
-        clean_title = re.sub(r'\[.*?\]|\(.*?\)', '', clean_title).strip()
+        # Apply custom filters first
+        for f in filters:
+            artist = re.sub(re.escape(f), '', artist, flags=re.IGNORECASE).strip()
+            title = re.sub(re.escape(f), '', title, flags=re.IGNORECASE).strip()
+
+        # Try to split by common separators
+        separators = [' - ', ' – ', ': ']
+        for sep in separators:
+            if sep in title:
+                parts = title.split(sep, 1)
+                if len(parts[0]) < len(parts[1]) and len(parts[0]) > 0:
+                    artist = parts[0]
+                    title = parts[1]
+                    break
         
-        return f"{artist} - {clean_title}"
+        # Remove common suffixes and leading separators
+        title = re.sub(r'\[.*?\]|\(.*?\)', '', title).strip(' -–:').strip()
+        artist = artist.strip(' -–:').strip()
+        
+        return f"{artist} - {title}"
 
     async def _cleanup_player(self, guild: discord.Guild):
         vc_id = await self.config.guild(guild).music_voice_channel_id()
@@ -186,7 +222,6 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             settings_message_id = await self.config.guild(guild).settings_message_id()
             if not settings_message_id: return
             try:
-                # Assuming the interaction message's channel is where the settings are.
                 message = await message.channel.fetch_message(settings_message_id)
             except (discord.NotFound, discord.Forbidden, AttributeError): return
 
@@ -216,22 +251,27 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
     async def _update_player_message(self, guild: discord.Guild):
         vc_id = await self.config.guild(guild).music_voice_channel_id()
         if not vc_id: return
+        
         channel = guild.get_channel(vc_id)
         if not channel: return
+            
+        player = lavalink.get_player(guild.id)
+        filters = await self.config.guild(guild).filters()
         
+        # --- Update Channel Status ---
         try:
-            player = lavalink.get_player(guild.id)
-            status_text = None
             if player and player.current:
-                formatted_title = self._format_title(player.current.author, player.current.title)
-                status_text = formatted_title[:100] # Truncate to 100 chars for status
-
-            await channel.edit(status=status_text, reason="Update music status")
+                status_text = self._format_title(player.current.author, player.current.title, filters)
+                status_text = status_text[:100] # Truncate
+                await channel.edit(status=status_text, reason="Update music status")
+            else:
+                await channel.edit(status=None, reason="Clear music status")
         except discord.Forbidden:
             log.warning(f"Missing 'Manage Channel' permission in '{guild.name}' to update VC status.")
         except Exception as e:
             log.error(f"Error updating VC status: {e}")
 
+        # --- Update Player Embed ---
         player_message_id = await self.config.guild(guild).player_message_id()
         if not player_message_id: return
         
@@ -241,12 +281,12 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             embed = discord.Embed(title="Music Player", color=discord.Color.green())
 
             if player and player.current:
-                formatted_title = self._format_title(player.current.author, player.current.title)
+                formatted_title = self._format_title(player.current.author, player.current.title, filters)
                 embed.add_field(name="Now Playing", value=formatted_title, inline=False)
             
             if player and player.queue:
                 tracks_to_show = player.queue[:3]
-                queue_list = [f"{i+1}. {self._format_title(track.author, track.title)}" for i, track in enumerate(tracks_to_show)]
+                queue_list = [f"{i+1}. {self._format_title(track.author, track.title, filters)}" for i, track in enumerate(tracks_to_show)]
                 
                 remaining_count = len(player.queue) - len(tracks_to_show)
                 if remaining_count > 0:
@@ -406,6 +446,14 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
                     break
         except Exception:
             pass
+            
+    @afterworkaudio_group.command(name="reset")
+    @commands.is_owner()
+    async def afterworkaudio_reset(self, ctx: commands.Context):
+        """Removes all manually set title filters."""
+        await self.config.guild(ctx.guild).filters.clear()
+        await ctx.send("✅ All custom title filters have been removed.")
+        await self._update_player_message(ctx.guild)
 
 async def setup(bot):
     cog = AfterworkAudio(bot)
