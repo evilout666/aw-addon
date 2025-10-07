@@ -26,8 +26,17 @@ class SetVoiceChannelModal(discord.ui.Modal, title="Set Trigger Voice Channel"):
         if not channel or not isinstance(channel, discord.VoiceChannel):
             return await interaction.response.send_message("❌ Voice channel not found.", ephemeral=True)
 
+        # Set permissions to make the channel view-only
+        try:
+            await channel.set_permissions(interaction.guild.default_role, send_messages=False, reason="Set as AfterworkAudio music channel.")
+        except discord.Forbidden:
+            await self.cog._send_owner_dm(f"Failed to set view-only permissions for **{channel.name}** in **{interaction.guild.name}**. I need the `Manage Channels` permission.")
+            await interaction.response.send_message(f"✅ Trigger VC set to **{channel.name}**. \n⚠️ **Warning:** I could not set view-only permissions.", ephemeral=True)
+        except Exception as e:
+            log.error(f"An unexpected error occurred while setting permissions for channel {channel_id}: {e}")
+
         await self.cog.config.guild(interaction.guild).music_voice_channel_id.set(channel.id)
-        await interaction.response.send_message(f"✅ Trigger VC set to **{channel.name}**.", ephemeral=True)
+        await interaction.response.send_message(f"✅ Trigger VC set to **{channel.name}** and is now view-only.", ephemeral=True)
         await self.cog.update_settings_message(interaction.guild, interaction.message)
 
 
@@ -50,7 +59,6 @@ class PlayerView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
         
-        # This button's state is determined when the view is created.
         play_pause_button = discord.ui.Button(
             style=discord.ButtonStyle.danger if is_playing else discord.ButtonStyle.success,
             label="Pause" if is_playing else "Play",
@@ -114,6 +122,14 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
     async def cog_load(self):
         self.bot.add_view(self.settings_view)
         self.bot.add_view(self.player_view)
+
+    async def _send_owner_dm(self, message: str):
+        owner = self.bot.get_user(self.bot.owner_id)
+        if owner:
+            try:
+                await owner.send(f"**AfterworkAudio Warning:**\n{message}")
+            except discord.Forbidden:
+                log.warning("Could not send owner a DM. They may have DMs disabled.")
 
     async def _cleanup_player(self, guild: discord.Guild):
         vc_id = await self.config.guild(guild).music_voice_channel_id()
@@ -214,6 +230,21 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
         if before.channel and before.channel.id == voice_channel_id and not before.channel.members:
             await self._cleanup_player(guild)
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if not message.guild or not message.author.id == self.bot.user.id:
+            return
+
+        vc_id = await self.config.guild(message.guild).music_voice_channel_id()
+        player_message_id = await self.config.guild(message.guild).player_message_id()
+
+        # Check if the message is in the configured music channel and is not the player message
+        if message.channel.id == vc_id and message.id != player_message_id:
+            try:
+                await message.delete()
+            except (discord.Forbidden, discord.NotFound):
+                pass # Ignore if we can't delete it
 
     async def _invoke_audio_command(self, interaction: discord.Interaction, command_name: str, *, query: str = None):
         await interaction.response.defer(ephemeral=True, thinking=True)
