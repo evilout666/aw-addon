@@ -265,7 +265,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             
         embed = discord.Embed(
             title="Music Channel Control",
-            description="Use the buttons below to configure the automated music player.",
+            description="Use this panel to set the music voice channel where the player will be active.",
             color=await ctx.embed_color()
         )
         embed.add_field(name="System Status", value=status_text, inline=False)
