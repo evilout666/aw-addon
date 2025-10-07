@@ -181,12 +181,17 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             
         try:
             message = await channel.fetch_message(player_message_id)
-            
             player = lavalink.get_player(guild.id)
             embed = discord.Embed(title="Music Player", color=discord.Color.green())
 
             if player and player.current:
-                embed.add_field(name="Now Playing", value=f"{player.current.author} - {player.current.title}", inline=False)
+                artist = player.current.author
+                if artist.startswith("NFrealmusic - "):
+                    artist = artist.replace("NFrealmusic - ", "")
+                
+                embed.add_field(name="Now Playing", value=f"{artist} - {player.current.title}", inline=False)
+                if player.current.thumbnail:
+                    embed.set_thumbnail(url=player.current.thumbnail)
             
             if player and player.queue:
                 queue_list = [f"{i+1}. {track.title}" for i, track in enumerate(player.queue[:5])]
