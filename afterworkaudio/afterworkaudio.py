@@ -8,6 +8,23 @@ import asyncio
 log = logging.getLogger("red.AfterworkAudio")
 
 
+# --- UTILITY ---
+
+async def _send_owner_dm(bot, message: str):
+    """Sends a critical error message directly to the bot owner."""
+    owner = bot.get_user(bot.owner_id)
+    if owner:
+        try:
+            embed = discord.Embed(
+                title="⚠️ Afterwork Audio Error",
+                description=message,
+                color=discord.Color.red()
+            )
+            await owner.send(embed=embed)
+        except discord.Forbidden:
+            log.error("Failed to DM owner. Owner must enable DMs.")
+
+
 # --- MODALS ---
 
 class SetVoiceChannelModal(discord.ui.Modal, title="Set Music Channel"):
@@ -29,7 +46,7 @@ class SetVoiceChannelModal(discord.ui.Modal, title="Set Music Channel"):
             return await interaction.response.send_message("❌ Voice channel not found.", ephemeral=True)
 
         await self.cog.config.guild(interaction.guild).music_voice_channel_id.set(channel.id)
-        await interaction.response.send_message(f"✅ Music Channel set to **{channel.name}**.", ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
         await self.cog.update_settings_message(interaction.guild, interaction.message)
 
 
@@ -100,6 +117,12 @@ class SettingsView(discord.ui.View):
     def __init__(self, cog: commands.Cog):
         super().__init__(timeout=None)
         self.cog = cog
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if await self.cog.bot.is_owner(interaction.user):
+            return True
+        await interaction.response.send_message("Only the bot owner can use these controls.", ephemeral=True)
+        return False
 
     @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="set_voice_channel")
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -270,8 +293,9 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             await self._cleanup_player(guild)
             embed = discord.Embed(title="Music Player", description="Use the 'Song' button to request a track.", color=discord.Color.green())
             try:
-                # Always create a default view when a new session starts.
-                initial_view = PlayerView(self, is_playing=False, is_shuffling=False)
+                player = lavalink.get_player(guild.id)
+                initial_shuffle = player.shuffle if player else False
+                initial_view = PlayerView(self, is_playing=False, is_shuffling=initial_shuffle)
                 player_message = await voice_channel.send(embed=embed, view=initial_view)
                 await self.config.guild(guild).player_message_id.set(player_message.id)
             except discord.Forbidden: log.error(f"Missing permissions to send messages in {voice_channel.name}")
@@ -298,6 +322,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
     async def _invoke_audio_command(self, interaction: discord.Interaction, command_name: str, *, query: str = None):
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.voice:
+            # User error is sent ephemerally
             return await interaction.followup.send("❌ You must be in a voice channel.", ephemeral=True)
 
         try:
@@ -319,11 +344,12 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
                 await self._update_player_message(interaction.guild)
 
         except Exception as e:
+            # System errors are sent to the bot owner
             log.error(f"Error invoking '{command_name}': {e}", exc_info=True)
-            await interaction.followup.send("❌ An error occurred.", ephemeral=True)
+            await _send_owner_dm(self.bot, f"An error occurred while trying to execute the `{command_name}` command in **{interaction.guild.name}**.")
 
     @commands.group(name="afterworkaudio")
-    @commands.admin_or_permissions(manage_guild=True)
+    @commands.is_owner() # Command group restricted to owner
     async def afterworkaudio_group(self, ctx: commands.Context):
         """Manage the AfterworkAudio system."""
         if not ctx.invoked_subcommand: await ctx.send_help()
