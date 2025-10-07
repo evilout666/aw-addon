@@ -62,15 +62,18 @@ class TargetChannelModal(discord.ui.Modal, title="Set Target Channel"):
     async def on_submit(self,interaction:discord.Interaction):
         input_id=self.channel_id_input.value.strip()
         try:channel_id=int(input_id)
-        except ValueError:return await interaction.response.send_message("❌ Invalid ID.", ephemeral=False)
+        except ValueError:return await interaction.response.send_message("❌ Invalid ID.", ephemeral=True)
         channel=interaction.guild.get_channel(channel_id)
-        if not channel or not isinstance(channel,discord.TextChannel):return await interaction.response.send_message(f"❌ Text Channel not found.", ephemeral=False)
+        if not channel or not isinstance(channel,discord.TextChannel):return await interaction.response.send_message(f"❌ Text Channel not found.", ephemeral=True)
+        
         await self.cog.config.guild(interaction.guild).dest_channel.set(channel_id)
+        
         embed=self.original_message.embeds[0]
         embed.set_footer(text=_get_admin_footer(interaction, "Target updated"))
+        
         await _update_setup_embed(self.cog,interaction.guild,embed)
         await interaction.response.edit_message(embed=embed)
-        await interaction.followup.send("✅ Target Channel ID updated.", ephemeral=True)
+        # Success confirmation removed
 
 class RadarrIDModal(discord.ui.Modal, title="Set Radarr Integration ID"):
     user_id_input = discord.ui.TextInput(label="Radarr Integration ID",style=discord.TextStyle.short,placeholder="Paste the ID for Radarr webhooks.",required=True,max_length=20,)
@@ -79,13 +82,16 @@ class RadarrIDModal(discord.ui.Modal, title="Set Radarr Integration ID"):
     async def on_submit(self, interaction: discord.Interaction):
         input_id = self.user_id_input.value.strip()
         try:user_id = int(input_id)
-        except ValueError:return await interaction.response.send_message("❌ Invalid ID.", ephemeral=False)
+        except ValueError:return await interaction.response.send_message("❌ Invalid ID.", ephemeral=True)
+        
         await self.cog.config.guild(interaction.guild).radarr_webhook_id.set(user_id)
+        
         embed = self.original_message.embeds[0]
         embed.set_footer(text=_get_admin_footer(interaction, "Radarr ID updated"))
+        
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.response.edit_message(embed=embed)
-        await interaction.followup.send("✅ Radarr Integration ID updated.", ephemeral=True)
+        # Success confirmation removed
 
 class SonarrIDModal(discord.ui.Modal, title="Set Sonarr Integration ID"):
     user_id_input = discord.ui.TextInput(label="Sonarr Integration ID",style=discord.TextStyle.short,placeholder="Paste the ID for Sonarr webhooks.",required=True,max_length=20,)
@@ -94,13 +100,16 @@ class SonarrIDModal(discord.ui.Modal, title="Set Sonarr Integration ID"):
     async def on_submit(self, interaction: discord.Interaction):
         input_id = self.user_id_input.value.strip()
         try:user_id = int(input_id)
-        except ValueError:return await interaction.response.send_message("❌ Invalid ID.", ephemeral=False)
+        except ValueError:return await interaction.response.send_message("❌ Invalid ID.", ephemeral=True)
+        
         await self.cog.config.guild(interaction.guild).sonarr_webhook_id.set(user_id)
+        
         embed = self.original_message.embeds[0]
         embed.set_footer(text=_get_admin_footer(interaction, "Sonarr ID updated"))
+        
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.response.edit_message(embed=embed)
-        await interaction.followup.send("✅ Sonarr Integration ID updated.", ephemeral=True)
+        # Success confirmation removed
 
 # --- VIEW (The Persistent Setup Hub) ---
 
@@ -113,22 +122,22 @@ class SetupView(discord.ui.View):
 
     @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="tv_set_target_button", row=0)
     async def set_target_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
+        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         await interaction.response.send_modal(TargetChannelModal(self.cog, interaction.message))
 
     @discord.ui.button(label="Radarr ID", style=discord.ButtonStyle.primary, custom_id="tv_set_radarr_id_button", row=0)
     async def set_radarr_id_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
+        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         await interaction.response.send_modal(RadarrIDModal(self.cog, interaction.message))
 
     @discord.ui.button(label="Sonarr ID", style=discord.ButtonStyle.primary, custom_id="tv_set_sonarr_id_button", row=0)
     async def set_sonarr_id_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
+        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         await interaction.response.send_modal(SonarrIDModal(self.cog, interaction.message))
 
     @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="tv_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
+        if not await self.cog.bot.is_owner(interaction.user): return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         
         await interaction.response.defer(ephemeral=True, thinking=True)
         new_state = not (await self.cog.config.guild(interaction.guild).enabled())
@@ -144,7 +153,7 @@ class SetupView(discord.ui.View):
         await _update_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed, view=self)
         
-        await interaction.followup.send(f"System has been **{'enabled' if new_state else 'disabled'}**.", ephemeral=True)
+        # Success confirmation removed
 
 # --- MAIN COG CLASS ---
 
@@ -281,4 +290,3 @@ async def setup(bot):
     cog = AfterworkTV(bot)
     await cog.initialize()
     await bot.add_cog(cog)
-
