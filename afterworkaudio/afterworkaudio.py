@@ -244,7 +244,8 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
                 pass
 
     async def _invoke_audio_command(self, interaction: discord.Interaction, command_name: str, *, query: str = None):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        # This defer without 'thinking=True' will acknowledge the interaction silently.
+        await interaction.response.defer(ephemeral=True)
         if not interaction.user.voice:
             return await interaction.followup.send("❌ You must be in a voice channel.", ephemeral=False)
 
