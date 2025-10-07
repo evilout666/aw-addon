@@ -1,7 +1,6 @@
 import discord
 from redbot.core import commands, Config
 import logging
-import asyncio
 from typing import Optional
 
 log = logging.getLogger("red.AfterworkAudio")
@@ -32,25 +31,8 @@ class SetVoiceChannelModal(discord.ui.Modal, title="Set Trigger Voice Channel"):
         await self.cog.update_settings_message(interaction.guild, interaction.message)
 
 
-class AddPlaylistModal(discord.ui.Modal, title="Add a Playlist"):
-    playlist_name = discord.ui.TextInput(label="Playlist Name", placeholder="e.g., Lofi Beats", required=True)
-    playlist_url = discord.ui.TextInput(label="Playlist URL", placeholder="Paste a YouTube or Spotify URL.", required=True)
-
-    def __init__(self, cog):
-        super().__init__()
-        self.cog = cog
-
-    async def on_submit(self, interaction: discord.Interaction):
-        name = self.playlist_name.value.strip()
-        url = self.playlist_url.value.strip()
-        async with self.cog.config.guild(interaction.guild).playlists() as playlists:
-            playlists[name] = url
-        await interaction.response.send_message(f"✅ Playlist '{name}' saved.", ephemeral=True)
-        await self.cog.update_settings_message(interaction.guild, interaction.message)
-
-
-class PlayerPlayModal(discord.ui.Modal, title="Play Music"):
-    query_input = discord.ui.TextInput(label="URL or Saved Playlist Name", placeholder="Paste a URL or type a saved playlist name.", required=True)
+class PlayerPlayModal(discord.ui.Modal, title="Request a Song"):
+    query_input = discord.ui.TextInput(label="Song URL or Search Query", placeholder="Paste a URL or type a song name to search.", required=True)
 
     def __init__(self, cog: commands.Cog):
         super().__init__()
@@ -58,32 +40,47 @@ class PlayerPlayModal(discord.ui.Modal, title="Play Music"):
 
     async def on_submit(self, interaction: discord.Interaction):
         query = self.query_input.value.strip()
-        all_playlists = await self.cog.config.guild(interaction.guild).playlists()
-        final_query = all_playlists.get(query, query)
-        await self.cog._invoke_audio_command(interaction, "play", query=final_query)
+        await self.cog._invoke_audio_command(interaction, "play", query=query)
 
 
 # --- VIEWS ---
 
 class PlayerView(discord.ui.View):
-    def __init__(self, cog: commands.Cog):
+    def __init__(self, cog: commands.Cog, is_playing: bool = False):
         super().__init__(timeout=None)
         self.cog = cog
+        
+        # Dynamically create the play/pause button
+        self.play_pause_button = discord.ui.Button(
+            style=discord.ButtonStyle.danger if is_playing else discord.ButtonStyle.success,
+            label="Pause" if is_playing else "Play",
+            custom_id="player_pause_toggle"
+        )
+        self.play_pause_button.callback = self.on_play_pause
+        self.add_item(self.play_pause_button)
+        
+        # Add the other static buttons
+        self.add_item(discord.ui.Button(label="Skip", style=discord.ButtonStyle.secondary, custom_id="player_skip"))
+        self.add_item(discord.ui.Button(label="Stop", style=discord.ButtonStyle.danger, custom_id="player_stop"))
+        
+        # Re-map callbacks after manual item addition
+        for item in self.children:
+            if item.custom_id == "player_song": item.callback = self.on_song
+            if item.custom_id == "player_skip": item.callback = self.on_skip
+            if item.custom_id == "player_stop": item.callback = self.on_stop
 
-    @discord.ui.button(label="Play", style=discord.ButtonStyle.success, custom_id="player_play")
-    async def play_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    # Manually define callbacks since we are adding items dynamically
+    @discord.ui.button(label="Song", style=discord.ButtonStyle.success, custom_id="player_song", row=0)
+    async def on_song(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(PlayerPlayModal(self.cog))
 
-    @discord.ui.button(label="Play/Pause", style=discord.ButtonStyle.primary, custom_id="player_pause")
-    async def pause_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def on_play_pause(self, interaction: discord.Interaction):
         await self.cog._invoke_audio_command(interaction, "pause")
 
-    @discord.ui.button(label="Skip", style=discord.ButtonStyle.secondary, custom_id="player_skip")
-    async def skip_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def on_skip(self, interaction: discord.Interaction):
         await self.cog._invoke_audio_command(interaction, "skip")
 
-    @discord.ui.button(label="Stop", style=discord.ButtonStyle.danger, custom_id="player_stop")
-    async def stop_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def on_stop(self, interaction: discord.Interaction):
         await self.cog._invoke_audio_command(interaction, "stop")
 
 
@@ -95,31 +92,6 @@ class SettingsView(discord.ui.View):
     @discord.ui.button(label="Set Voice Channel", style=discord.ButtonStyle.primary, custom_id="set_voice_channel")
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(SetVoiceChannelModal(self.cog))
-
-    @discord.ui.button(label="Add", style=discord.ButtonStyle.secondary, custom_id="add_playlist")
-    async def add_playlist_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(AddPlaylistModal(self.cog))
-
-    @discord.ui.button(label="Remove", style=discord.ButtonStyle.secondary, custom_id="remove_playlist")
-    async def remove_playlist_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        playlists = await self.cog.config.guild(interaction.guild).playlists()
-        if not playlists:
-            return await interaction.response.send_message("❌ No playlists saved.", ephemeral=True)
-
-        options = [discord.SelectOption(label=name) for name in playlists.keys()]
-        select_menu = discord.ui.Select(placeholder="Select a playlist to remove...", options=options)
-
-        async def select_callback(select_interaction: discord.Interaction):
-            playlist_name = select_interaction.data["values"][0]
-            async with self.cog.config.guild(interaction.guild).playlists() as pls:
-                if playlist_name in pls: del pls[playlist_name]
-            await select_interaction.response.send_message(f"✅ Playlist '{playlist_name}' removed.", ephemeral=True, view=None)
-            await self.cog.update_settings_message(interaction.guild, interaction.message)
-
-        select_menu.callback = select_callback
-        temp_view = discord.ui.View(timeout=180)
-        temp_view.add_item(select_menu)
-        await interaction.response.send_message("Please choose a playlist:", view=temp_view, ephemeral=True)
 
     @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.grey, custom_id="toggle_automation")
     async def toggle_automation_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -144,16 +116,19 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             settings_message_id=None,
             player_message_id=None,
             is_enabled=False,
-            playlists={},
         )
         self.settings_view = SettingsView(self)
-        self.player_view = PlayerView(self)
+        self.player_view = PlayerView(self, is_playing=False) # Base instance for cog_load
 
     async def cog_load(self):
         self.bot.add_view(self.settings_view)
+        # We add a base player view, but it will be replaced dynamically
         self.bot.add_view(self.player_view)
 
-    async def _cleanup_player(self, guild: discord.Guild, vc_id: int):
+    async def _cleanup_player(self, guild: discord.Guild):
+        vc_id = await self.config.guild(guild).music_voice_channel_id()
+        if not vc_id: return
+        
         voice_channel = guild.get_channel(vc_id)
         if not voice_channel: return
         
@@ -177,18 +152,15 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         settings = await self.config.guild(guild).all()
         is_enabled = settings.get('is_enabled', False)
         vc_id = settings.get('music_voice_channel_id')
-        playlists = settings.get('playlists', {})
         
         status_display = "🟢 Active" if is_enabled else "🔴 Inactive"
         vc_display = f"**{guild.get_channel(vc_id).name}** (`{vc_id}`)" if vc_id and guild.get_channel(vc_id) else "*Not configured*"
-        playlist_display = "\n".join(f"• {name}" for name in playlists.keys()) or "*None*"
 
         embed = message.embeds[0]
         embed.description = "Use this panel to set the trigger voice channel. The player will appear in that channel's integrated text chat."
         embed.clear_fields()
         embed.add_field(name="System Status", value=status_display, inline=False)
         embed.add_field(name="Trigger Voice Channel", value=vc_display, inline=False)
-        embed.add_field(name="Saved Playlists", value=playlist_display, inline=False)
         
         toggle_button = discord.utils.get(self.settings_view.children, custom_id="toggle_automation")
         if is_enabled:
@@ -199,6 +171,42 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             toggle_button.style = discord.ButtonStyle.success
         
         await message.edit(embed=embed, view=self.settings_view)
+
+    async def _update_player_view(self, guild: discord.Guild, is_playing: bool):
+        """Fetches the player message and updates its view with the correct play/pause state."""
+        player_message_id = await self.config.guild(guild).player_message_id()
+        vc_id = await self.config.guild(guild).music_voice_channel_id()
+        
+        if not player_message_id or not vc_id:
+            return
+
+        channel = guild.get_channel(vc_id)
+        if not channel:
+            return
+            
+        try:
+            message = await channel.fetch_message(player_message_id)
+            new_view = PlayerView(self, is_playing=is_playing)
+            await message.edit(view=new_view)
+        except (discord.NotFound, discord.Forbidden):
+            # Message might have been deleted, clean up config
+            await self.config.guild(guild).player_message_id.clear()
+
+    @commands.Cog.listener("on_red_audio_track_start")
+    async def on_track_start(self, guild, track, requester):
+        await self._update_player_view(guild, is_playing=True)
+
+    @commands.Cog.listener("on_red_audio_track_pause")
+    async def on_track_pause(self, guild, track, requester):
+        await self._update_player_view(guild, is_playing=False)
+        
+    @commands.Cog.listener("on_red_audio_track_resume")
+    async def on_track_resume(self, guild, track, requester):
+        await self._update_player_view(guild, is_playing=True)
+
+    @commands.Cog.listener("on_red_audio_player_stop")
+    async def on_player_stop(self, guild, track, requester):
+        await self._update_player_view(guild, is_playing=False)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
@@ -212,16 +220,18 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         if after.channel and after.channel.id == voice_channel_id and len(after.channel.members) == 1:
             voice_channel = after.channel
             
-            await self._cleanup_player(guild, voice_channel_id)
+            await self._cleanup_player(guild)
             
             embed = discord.Embed(title="Music Controls", description="Session started! Use buttons to control music.", color=discord.Color.green())
             try:
-                player_message = await voice_channel.send(embed=embed, view=self.player_view)
+                # Start with a "Play" button since nothing is playing yet
+                initial_view = PlayerView(self, is_playing=False)
+                player_message = await voice_channel.send(embed=embed, view=initial_view)
                 await self.config.guild(guild).player_message_id.set(player_message.id)
             except discord.Forbidden: log.error(f"Missing permissions to send messages in {voice_channel.name}")
 
         if before.channel and before.channel.id == voice_channel_id and not before.channel.members:
-            await self._cleanup_player(guild, voice_channel_id)
+            await self._cleanup_player(guild)
 
     async def _invoke_audio_command(self, interaction: discord.Interaction, command_name: str, *, query: str = None):
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -230,26 +240,16 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
         try:
             message = interaction.message
-            # We need a prefix to simulate the command
             prefix = (await self.bot.get_prefix(message))[0]
-
-            # Store original message state
             original_content = message.content
             original_author = message.author
-
-            # Build the command string
             command_str = f"{prefix}{command_name}"
             if query:
                 command_str += f" {query}"
             
-            # Modify the message object to fake a command invocation
             message.content = command_str
             message.author = interaction.user
-
-            # Process the command through the bot
             await self.bot.process_commands(message)
-
-            # Restore the message object to its original state to avoid side effects
             message.content = original_content
             message.author = original_author
             
@@ -271,11 +271,9 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         settings = await self.config.guild(ctx.guild).all()
         is_enabled = settings.get('is_enabled', False)
         vc_id = settings.get('music_voice_channel_id')
-        playlists = settings.get('playlists', {})
         
         status_display = "🟢 Active" if is_enabled else "🔴 Inactive"
         vc_display = f"**{ctx.guild.get_channel(vc_id).name}** (`{vc_id}`)" if vc_id and ctx.guild.get_channel(vc_id) else "*Not configured*"
-        playlist_display = "\n".join(f"• {name}" for name in playlists.keys()) or "*None*"
 
         embed = discord.Embed(
             title="Music Channel Control",
@@ -284,7 +282,6 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         )
         embed.add_field(name="System Status", value=status_display, inline=False)
         embed.add_field(name="Trigger Voice Channel", value=vc_display, inline=False)
-        embed.add_field(name="Saved Playlists", value=playlist_display, inline=False)
         
         toggle_button = discord.utils.get(self.settings_view.children, custom_id="toggle_automation")
         if is_enabled:
