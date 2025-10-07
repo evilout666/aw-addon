@@ -234,7 +234,10 @@ class AfterworkMisc(commands.Cog, name="AfterworkMisc"):
         
         old_message_id = await self.config.guild(ctx.guild).setup_message_id()
         if old_message_id:
-            try: await ctx.channel.fetch_message(old_message_id).delete()
+            # FIX: Ensure fetch_message is awaited correctly by splitting the operation
+            try: 
+                old_message = await ctx.channel.fetch_message(old_message_id)
+                await old_message.delete()
             except discord.HTTPException: pass
 
         initial_hidden = await self._is_managed_category_hidden(ctx.guild)
