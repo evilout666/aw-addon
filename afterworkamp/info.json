@@ -1,0 +1,9 @@
+{
+    "author": ["YourName"],
+    "name": "AfterworkAMP",
+    "short": "AMP server status monitoring.",
+    "description": "A cog to monitor and display the status of multiple AMP instances without a Developer License.",
+    "requirements": ["pyotp", "requests"],
+    "tags": ["amp", "status", "server"],
+    "end_user_data_statement": "This cog does not store any user data."
+}
