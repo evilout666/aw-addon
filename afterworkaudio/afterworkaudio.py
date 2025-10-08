@@ -240,7 +240,10 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             settings_message_id = await self.config.guild(guild).settings_message_id()
             if not settings_message_id: return
             try:
-                message = await message.channel.fetch_message(settings_message_id)
+                if hasattr(message, 'channel'):
+                    message = await message.channel.fetch_message(settings_message_id)
+                else: 
+                    return 
             except (discord.NotFound, discord.Forbidden, AttributeError): return
 
         settings = await self.config.guild(guild).all()
@@ -374,7 +377,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
                 await self.config.guild(guild).player_message_id.set(player_message.id)
             except discord.Forbidden: log.error(f"Missing permissions to send messages in {voice_channel.name}")
 
-        if before.channel and before.channel.id == voice_channel_id and not before.channel.members:
+        if before.channel and before.channel.id == voice_channel_id and not any(not m.bot for m in before.channel.members):
             await self._cleanup_player(guild)
 
     @commands.Cog.listener()
@@ -394,31 +397,55 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             except (discord.Forbidden, discord.NotFound): pass
 
     async def _invoke_audio_command(self, interaction: discord.Interaction, command_name: str, *, query: str = None):
+        """A helper function to safely invoke an audio command from an interaction."""
+        # Defer the interaction immediately so it doesn't time out.
+        # The user will see a "thinking..." state.
         await interaction.response.defer(ephemeral=True)
+
+        # Check for prerequisites after deferring.
         if not interaction.user.voice:
-            return await interaction.followup.send("❌ You must be in a voice channel.", ephemeral=True)
+            # Use followup.send because we've already responded with defer().
+            await interaction.followup.send("❌ You must be in a voice channel.", ephemeral=True)
+            return
 
         try:
+            # Find the command the user is trying to run.
+            command = self.bot.get_command(command_name)
+            if command is None:
+                log.error(f"Could not find the '{command_name}' command to invoke.")
+                await _send_owner_dm(self.bot, f"Error in AfterworkAudio: Could not find the command `{command_name}` to invoke in **{interaction.guild.name}**.")
+                return
+
+            # Create a new, fake context object to run the command with.
+            # This is necessary because commands require a Context, not an Interaction.
             message = interaction.message
             prefix = (await self.bot.get_prefix(message))[0]
-            command_str = f"{prefix}{command_name}"
-            if query: command_str += f" {query}"
             
-            original_content, message.content = message.content, command_str
-            original_author, message.author = message.author, interaction.user
+            # Fake the message content to look like a user typed the command.
+            message.content = f"{prefix}{command_name}"
+            if query:
+                message.content += f" {query}"
+
+            # Important: Set the author of this fake message to the user who clicked the button.
+            message.author = interaction.user
+
+            # Create the context object from our fake message.
+            ctx = await self.bot.get_context(message)
             
-            await self.bot.process_commands(message)
+            # Invoke the command with our new context. 
+            # This runs the command (e.g., `[p]skip`) as if the user typed it.
+            await self.bot.invoke(ctx)
             
-            message.content = original_content
-            message.author = original_author
-            
-            if command_name in ["pause"]:
+            # After the command is invoked, we might need to update our player.
+            if command_name in ["pause", "skip", "stop"]:
+                # Give Lavalink a moment to process the command before we refresh.
                 await asyncio.sleep(0.5)
                 await self._update_player_message(interaction.guild)
 
         except Exception as e:
-            log.error(f"Error invoking '{command_name}': {e}", exc_info=True)
+            log.error(f"Error invoking audio command '{command_name}': {e}", exc_info=True)
             await _send_owner_dm(self.bot, f"An error occurred while trying to execute the `{command_name}` command in **{interaction.guild.name}**.")
+
 
     @commands.group(name="afterworkaudio")
     @commands.is_owner()
@@ -429,6 +456,14 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
     @afterworkaudio_group.command(name="deploy")
     async def afterworkaudio_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel."""
+        old_message_id = await self.config.guild(ctx.guild).settings_message_id()
+        if old_message_id:
+            try:
+                old_msg = await ctx.channel.fetch_message(old_message_id)
+                await old_msg.delete()
+            except (discord.NotFound, discord.Forbidden):
+                pass
+
         settings = await self.config.guild(ctx.guild).all()
         is_enabled = settings.get('is_enabled', False)
         vc_id = settings.get('music_voice_channel_id')
