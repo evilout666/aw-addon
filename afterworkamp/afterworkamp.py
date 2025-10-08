@@ -11,15 +11,15 @@ import os
 import logging
 from datetime import datetime, timezone
 
-# NOTE: These modules (utils, AMP, DB) are assumed to be available
-# and correctly configured by your RedBot/Gatekeeper environment.
-import utils 
-import AMP as AMP
-import DB as DB
+# >>> CORRECTED IMPORTS: Use relative paths (from .) to find the files in the same folder.
+# This fixes the ModuleNotFoundError.
+from . import utils 
+from . import AMP as AMP
+from . import DB as DB
 
 # --- CONFIGURATION (PLACEHOLDER) ---
-# NOTE: This will be overridden by the 'setstatuschannel' command after first run.
-GLOBAL_DEFAULT_CHANNEL_ID = 123456789012345678 # <<< REPLACE with a valid channel ID for initial setup
+# NOTE: This will be used as a fallback if a channel hasn't been set with the command.
+GLOBAL_DEFAULT_CHANNEL_ID = 123456789012345678 # <<< REPLACE with a valid channel ID
 STATUS_UPDATE_INTERVAL_SECONDS = 30 
 
 class AfterworkAMP(commands.Cog):
@@ -39,7 +39,7 @@ class AfterworkAMP(commands.Cog):
         
         # --- DB AND UTILITY HANDLERS ---
         self.DBHandler = DB.getDBHandler()
-        self.DBCOnfig = self.DBHandler.DB.DBConfig # Assumes your config is here
+        self.DBCOnfig = self.DBHandler.DB.DBConfig 
         self.uBot = utils.botUtils(client)
         self.dBot = utils.discordBot(client)
 
@@ -117,11 +117,13 @@ class AfterworkAMP(commands.Cog):
         total_online_servers = 0
         total_players = 0
         
+        # Loop over ALL 7 instances loaded into the AMPInstances dictionary
         for instance_name, instance_data in self.AMPInstances.items():
             
             # --- DYNAMIC CHANNEL RETRIEVAL ---
-            # Attempt to get the specific channel ID saved for this instance
-            target_channel_id = self.DBCOnfig.get(instance_name, {}).get('status_channel_id', GLOBAL_DEFAULT_CHANNEL_ID)
+            # Gets saved channel ID or falls back to the global default
+            instance_config = self.DBCOnfig.get(instance_name, {})
+            target_channel_id = instance_config.get('status_channel_id', GLOBAL_DEFAULT_CHANNEL_ID)
             
             if not target_channel_id:
                 self.logger.warning(f"No channel configured for {instance_name}. Skipping update.")
@@ -174,21 +176,19 @@ class AfterworkAMP(commands.Cog):
     async def set_status_channel(self, context: commands.Context, server_name: str, channel: discord.TextChannel):
         """Sets the Discord channel where a specific server's status embed will be posted."""
         
-        # 1. Input Validation: Check if the AMP instance name is valid
         if server_name not in self.AMPInstances:
             return await context.send(f"Error: AMP server **{server_name}** not found in the managed instances.", ephemeral=True)
 
-        # 2. Store the setting (NOTE: You must ensure this save method is correctly implemented)
         try:
-            # We save the channel ID tied to the instance name
-            # This logic assumes the DBHandler exposes a method to set nested instance config:
-            self.DBCOnfig.get(server_name, {})['status_channel_id'] = channel.id
+            # NOTE: This line needs proper implementation in your DB.py/DBConfig system
+            # It simulates saving the channel ID under the instance's config.
+            self.DBCOnfig[server_name] = self.DBCOnfig.get(server_name, {})
+            self.DBCOnfig[server_name]['status_channel_id'] = channel.id
             
             # Reset stored message ID to force a new post in the new channel
             if server_name in self.status_messages:
                  del self.status_messages[server_name]
             
-            # Force an update to instantly post the new embed
             await self.update_server_status_loop()
             
             await context.send(
@@ -198,7 +198,7 @@ class AfterworkAMP(commands.Cog):
             
         except Exception as e:
             self.logger.error(f"Error saving channel setting for {server_name}: {e}")
-            await context.send("Error saving channel setting. Please check your DB implementation.", ephemeral=True)
+            await context.send("Error saving channel setting. Check your DB implementation.", ephemeral=True)
 
     @commands.hybrid_command(name='ampstatus')
     @utils.role_check()
