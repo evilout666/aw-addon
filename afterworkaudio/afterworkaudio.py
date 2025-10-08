@@ -197,6 +197,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         )
         self.settings_view = SettingsView(self)
         self.player_view = PlayerView(self)
+        self.update_tasks = {}
 
     async def cog_load(self):
         self.bot.add_view(self.settings_view)
@@ -240,10 +241,10 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             settings_message_id = await self.config.guild(guild).settings_message_id()
             if not settings_message_id: return
             try:
-                if hasattr(message, 'channel'):
-                    message = await message.channel.fetch_message(settings_message_id)
-                else: 
-                    return 
+                # Need a channel object to fetch from, which we don't have if message is None.
+                # This part of the logic might need re-evaluation if it's called without a message context.
+                # For now, we'll assume it's primarily called from interactions where message exists.
+                return
             except (discord.NotFound, discord.Forbidden, AttributeError): return
 
         settings = await self.config.guild(guild).all()
@@ -271,6 +272,18 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
             toggle_button.style = discord.ButtonStyle.success
         
         await message.edit(embed=embed, view=self.settings_view)
+
+    async def _debounced_update(self, guild: discord.Guild):
+        """Waits for a short period before running the actual update."""
+        await asyncio.sleep(1.5)  # Wait 1.5 seconds
+        await self._update_player_message(guild)
+
+    def schedule_player_update(self, guild: discord.Guild):
+        """Cancels any pending update and schedules a new one."""
+        task = self.update_tasks.get(guild.id)
+        if task:
+            task.cancel()
+        self.update_tasks[guild.id] = self.bot.loop.create_task(self._debounced_update(guild))
 
     async def _update_player_message(self, guild: discord.Guild):
         vc_id = await self.config.guild(guild).music_voice_channel_id()
@@ -333,30 +346,29 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
     @commands.Cog.listener("on_red_audio_track_start")
     async def on_track_start(self, guild, track, requester):
         await self.bot.change_presence(activity=discord.Game(name="Music"))
-        await self._update_player_message(guild)
+        self.schedule_player_update(guild)
 
     @commands.Cog.listener("on_red_audio_track_pause")
     async def on_track_pause(self, guild, track, requester):
-        await self._update_player_message(guild)
+        self.schedule_player_update(guild)
         
     @commands.Cog.listener("on_red_audio_track_resume")
     async def on_track_resume(self, guild, track, requester):
-        await self._update_player_message(guild)
+        self.schedule_player_update(guild)
 
     @commands.Cog.listener("on_red_audio_player_stop")
     async def on_player_stop(self, guild, track, requester):
         await self.bot.change_presence(activity=None)
-        await self._update_player_message(guild)
+        self.schedule_player_update(guild)
         
     @commands.Cog.listener("on_red_audio_queue_end")
     async def on_queue_end(self, guild, track, requester):
         await self.bot.change_presence(activity=None)
-        await self._update_player_message(guild)
+        self.schedule_player_update(guild)
 
     @commands.Cog.listener("on_red_audio_track_add")
     async def on_track_add(self, guild, track, requester):
-        await asyncio.sleep(0.1)
-        await self._update_player_message(guild)
+        self.schedule_player_update(guild)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
@@ -367,7 +379,7 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
         voice_channel_id = await self.config.guild(guild).music_voice_channel_id()
         if not voice_channel_id: return
 
-        if after.channel and after.channel.id == voice_channel_id and len(after.channel.members) == 1:
+        if after.channel and after.channel.id == voice_channel_id and len([m for m in after.channel.members if not m.bot]) == 1:
             voice_channel = after.channel
             await self._cleanup_player(guild)
             embed = discord.Embed(title="Music Player", description="Use the 'Song' button to request a track.", color=discord.Color.green())
@@ -398,53 +410,36 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 
     async def _invoke_audio_command(self, interaction: discord.Interaction, command_name: str, *, query: str = None):
         """A helper function to safely invoke an audio command from an interaction."""
-        # Defer the interaction immediately so it doesn't time out.
-        # The user will see a "thinking..." state.
         await interaction.response.defer(ephemeral=True)
 
-        # Check for prerequisites after deferring.
         if not interaction.user.voice:
-            # Use followup.send because we've already responded with defer().
             await interaction.followup.send("❌ You must be in a voice channel.", ephemeral=True)
             return
 
         try:
-            # Find the command the user is trying to run.
             command = self.bot.get_command(command_name)
             if command is None:
                 log.error(f"Could not find the '{command_name}' command to invoke.")
-                await _send_owner_dm(self.bot, f"Error in AfterworkAudio: Could not find the command `{command_name}` to invoke in **{interaction.guild.name}**.")
+                await _send_owner_dm(self.bot, f"Error in AfterworkAudio: Could not find command `{command_name}` in **{interaction.guild.name}**.")
                 return
 
-            # Create a new, fake context object to run the command with.
-            # This is necessary because commands require a Context, not an Interaction.
             message = interaction.message
             prefix = (await self.bot.get_prefix(message))[0]
             
-            # Fake the message content to look like a user typed the command.
             message.content = f"{prefix}{command_name}"
             if query:
                 message.content += f" {query}"
 
-            # Important: Set the author of this fake message to the user who clicked the button.
             message.author = interaction.user
-
-            # Create the context object from our fake message.
             ctx = await self.bot.get_context(message)
-            
-            # Invoke the command with our new context. 
-            # This runs the command (e.g., `[p]skip`) as if the user typed it.
             await self.bot.invoke(ctx)
             
-            # After the command is invoked, we might need to update our player.
             if command_name in ["pause", "skip", "stop"]:
-                # Give Lavalink a moment to process the command before we refresh.
-                await asyncio.sleep(0.5)
-                await self._update_player_message(interaction.guild)
+                self.schedule_player_update(interaction.guild)
 
         except Exception as e:
             log.error(f"Error invoking audio command '{command_name}': {e}", exc_info=True)
-            await _send_owner_dm(self.bot, f"An error occurred while trying to execute the `{command_name}` command in **{interaction.guild.name}**.")
+            await _send_owner_dm(self.bot, f"An error occurred while executing `{command_name}` in **{interaction.guild.name}**.")
 
 
     @commands.group(name="afterworkaudio")
@@ -515,3 +510,4 @@ class AfterworkAudio(commands.Cog, name="AfterworkAudio"):
 async def setup(bot):
     cog = AfterworkAudio(bot)
     await bot.add_cog(cog)
+
