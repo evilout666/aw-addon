@@ -11,11 +11,11 @@ import os
 import logging
 from datetime import datetime, timezone
 
-# >>> CORRECTED IMPORTS: Use relative paths (from .) to find the files in the same folder.
-# This fixes the ModuleNotFoundError.
-from . import utils 
-from . import AMP as AMP
-from . import DB as DB
+# >>> CORRECTED IMPORTS: Switched back to absolute imports because the file is loaded
+# as a standalone module via [p]addpath, not as part of a package.
+import utils 
+import AMP as AMP
+import DB as DB
 
 # --- CONFIGURATION (PLACEHOLDER) ---
 # NOTE: This will be used as a fallback if a channel hasn't been set with the command.
@@ -180,8 +180,8 @@ class AfterworkAMP(commands.Cog):
             return await context.send(f"Error: AMP server **{server_name}** not found in the managed instances.", ephemeral=True)
 
         try:
-            # NOTE: This line needs proper implementation in your DB.py/DBConfig system
-            # It simulates saving the channel ID under the instance's config.
+            # NOTE: This saving logic must be correctly adapted to your DB.py/DBConfig implementation.
+            # This is a placeholder for saving the configuration data.
             self.DBCOnfig[server_name] = self.DBCOnfig.get(server_name, {})
             self.DBCOnfig[server_name]['status_channel_id'] = channel.id
             
