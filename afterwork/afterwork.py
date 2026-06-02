@@ -1035,7 +1035,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
         if not perms.send_messages or not perms.manage_messages:
             return await _send_owner_dm(self.bot, f"Deploy failed in **{ctx.guild.name}**. Need Send/Manage Messages in **#{ctx.channel.name}**.")
 
-        await ctx.send("⌛ **Deploying all Afterwork configuration hubs...**")
+        deploy_msg = await ctx.send("⌛ **Deploying all Afterwork configuration hubs...**")
         
         subcommands = [
             self.afterwork_audio_deploy,
@@ -1053,6 +1053,11 @@ class Afterwork(commands.Cog, name="Afterwork"):
             except Exception as e:
                 log.error(f"Error deploying submodule: {e}", exc_info=True)
                 await ctx.send(f"⚠️ Error deploying submodule: {e.__class__.__name__}")
+
+        try:
+            await deploy_msg.delete()
+        except (discord.NotFound, discord.Forbidden):
+            pass
 
     # --- SUBCOMMANDS ---
 
