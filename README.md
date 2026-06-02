@@ -34,7 +34,7 @@ Deploy the hubs in a channel using the following command structure:
 | `[p]afterwork tv` | Deploys the Sonarr and Radarr webhook reformatter hub. |
 | `[p]afterwork voice` | Deploys the temporary voice room management hub. |
 | `[p]afterwork hide` | Deploys the category visibility hide/show hub. |
-| `[p]afterwork rssremove <name>` | Removes an RSS feed configuration by its unique name. |
+| `[p]afterwork rss remove <name>` | Removes an RSS feed configuration by its unique name. |
 
 ## Installation and Usage
 

@@ -488,7 +488,7 @@ class RssSetupView(discord.ui.View):
     @discord.ui.button(label="Remove Feed (Command)", style=discord.ButtonStyle.secondary, custom_id="rss_remove_feed_button", row=0, disabled=True)
     async def remove_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self._check_owner(interaction): return
-        await interaction.response.send_message("Please use the command `[p]afterwork rssremove <name>` to remove a feed.", ephemeral=True)
+        await interaction.response.send_message("Please use the command `[p]afterwork rss remove <name>` to remove a feed.", ephemeral=True)
 
     @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.secondary, custom_id="rss_toggle_button", row=1)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1141,7 +1141,12 @@ class Afterwork(commands.Cog, name="Afterwork"):
                     break
         except Exception: pass
 
-    @afterwork_group.command(name="rss")
+    @afterwork_group.group(name="rss", invoke_without_command=True)
+    async def afterwork_rss_group(self, ctx: commands.Context):
+        """RSS feed control hub."""
+        if ctx.invoked_subcommand is None:
+            await self.afterwork_rss_deploy(ctx)
+
     async def afterwork_rss_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for RSS."""
         old_message_id = await self.config.guild(ctx.guild).rss_setup_message_id()
@@ -1268,8 +1273,8 @@ class Afterwork(commands.Cog, name="Afterwork"):
                     break
         except Exception: pass
 
-    @afterwork_group.command(name="rssremove")
-    async def afterwork_rssremove(self, ctx, feed_name: str):
+    @afterwork_rss_group.command(name="remove")
+    async def afterwork_rss_remove(self, ctx, feed_name: str):
         """Removes an RSS feed by its configured name."""
         feed_name = feed_name.lower()
         async with self.config.guild(ctx.guild).rss_feeds() as feeds:
