@@ -404,20 +404,20 @@ class EmbedSetupView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
 
-    def _check_owner(self, interaction: discord.Interaction):
-        if interaction.user.id != self.cog.bot.owner_id:
-            asyncio.create_task(interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=False))
+    async def _check_owner(self, interaction: discord.Interaction):
+        if not await self.cog.bot.is_owner(interaction.user):
+            await interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=True)
             return False
         return True
 
     @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.primary, custom_id="embed_set_channel", row=0)
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self._check_owner(interaction): return
+        if not await self._check_owner(interaction): return
         await interaction.response.send_modal(EmbedNamedChannelSetModal(self.cog, interaction.message))
 
     @discord.ui.button(label="Send Embed", style=discord.ButtonStyle.success, custom_id="embed_send_msg", row=0)
     async def send_embed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self._check_owner(interaction): return
+        if not await self._check_owner(interaction): return
         await interaction.response.send_modal(EmbedNamedMessageSendModal(self.cog, interaction.message))
 
 
@@ -474,25 +474,25 @@ class RssSetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    def _check_owner(self, interaction: discord.Interaction):
-        if interaction.user.id != self.cog.bot.owner_id: 
-            asyncio.create_task(interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=False))
+    async def _check_owner(self, interaction: discord.Interaction):
+        if not await self.cog.bot.is_owner(interaction.user): 
+            await interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=True)
             return False
         return True
 
     @discord.ui.button(label="Add Feed", style=discord.ButtonStyle.primary, custom_id="rss_add_feed_button", row=0)
     async def add_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self._check_owner(interaction): return
+        if not await self._check_owner(interaction): return
         await interaction.response.send_modal(RssAddFeedModal(self.cog, interaction.message))
 
     @discord.ui.button(label="Remove Feed (Command)", style=discord.ButtonStyle.secondary, custom_id="rss_remove_feed_button", row=0, disabled=True)
     async def remove_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self._check_owner(interaction): return
+        if not await self._check_owner(interaction): return
         await interaction.response.send_message("Please use the command `[p]afterwork rss remove <name>` to remove a feed.", ephemeral=True)
 
     @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.secondary, custom_id="rss_toggle_button", row=1)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self._check_owner(interaction): return
+        if not await self._check_owner(interaction): return
         await interaction.response.defer(ephemeral=True, thinking=True)
         
         new_state = not (await self.cog.config.guild(interaction.guild).rss_enabled())
@@ -1991,13 +1991,12 @@ class Afterwork(commands.Cog, name="Afterwork"):
             return False 
 
         first_channel = category.channels[0]
-        for target, overwrite in first_channel.overwrites.items():
-            if isinstance(target, discord.Role):
-                if target.permissions.administrator:
-                    if overwrite.view_channel is False:
-                        return True
-                    else:
-                        return False
+        admin_roles = await self._get_admin_roles(guild)
+        for role in admin_roles:
+            if role < guild.me.top_role:
+                overwrite = first_channel.overwrites_for(role)
+                if overwrite.view_channel is False:
+                    return True
         return False
 
     async def _get_admin_roles(self, guild: discord.Guild):
