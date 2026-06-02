@@ -1,0 +1,11 @@
+{
+  "author": ["evilout666"],
+  "description": "Afterwork Custom Embed Sender for Redbot.",
+  "install_msg": "Thanks for installing. Use [p]afterworkembed deploy to set up the control panel.",
+  "short": "Afterwork Embed control panel.",
+  "end_user_data_statement": "No end user data is persistently stored.",
+  "min_bot_version": "3.5.0",
+  "min_python_version": [3, 8, 0],
+  "tags": ["embed", "utility", "panel"],
+  "version": "1.0.0"
+}
