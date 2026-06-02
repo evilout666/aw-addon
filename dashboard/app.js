@@ -353,8 +353,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Initialization ---
     // Render initial sample fields
     const initialFields = [
-        { id: '1', name: 'Server Details', value: 'IP: `play.afterworkplay.com`\nRegion: `US-East`', inline: true },
-        { id: '2', name: 'Modpack Version', value: 'Version: `v2.4.1` (Latest)', inline: true }
+        { 
+            id: '1', 
+            name: '🗺️ Server Details', 
+            value: 'Name: `AFTERWORK Gaming`\nRegion: `Europe (EU)`', 
+            inline: true 
+        },
+        { 
+            id: '2', 
+            name: '⚙️ Boosted Settings', 
+            value: 'XP: `3X`\nResources: `3X Gathering`', 
+            inline: true 
+        },
+        { 
+            id: '3', 
+            name: '🚀 How to Join', 
+            value: '1. Open the Server Browser.\n2. Switch to the **Experimental** tab.\n3. Search for `AFTERWORK Gaming`.', 
+            inline: false 
+        }
     ];
     
     initialFields.forEach(f => {
