@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Afterwork Play | Interactive Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-logo">
+                    <i class="fa-solid fa-gamepad"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>Afterwork Play</h1>
+                    <span>Admin Dashboard</span>
+                </div>
+            </div>
+            
+            <nav class="nav-menu">
+                <button class="nav-btn active" data-tab="embed-builder">
+                    <i class="fa-solid fa-bullhorn"></i>
+                    <span>Embed Builder</span>
+                </button>
+                <button class="nav-btn" data-tab="rss-manager">
+                    <i class="fa-solid fa-rss"></i>
+                    <span>RSS Manager</span>
+                </button>
+                <button class="nav-btn" data-tab="quick-deploy">
+                    <i class="fa-solid fa-rocket"></i>
+                    <span>Quick Deployer</span>
+                </button>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="pulse-dot"></span>
+                    <span>dash.afterworkplay.com</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="top-bar">
+                <div class="welcome-text">
+                    <h2 id="tab-title">Embed Builder</h2>
+                    <p id="tab-subtitle">Design custom rich embeds and generate pasteable bot commands.</p>
+                </div>
+                <div class="meta-links">
+                    <a href="https://github.com/evilout666/AWCogs" target="_blank" class="meta-btn">
+                        <i class="fa-brands fa-github"></i>
+                        <span>Repository</span>
+                    </a>
+                </div>
+            </header>
+
+            <!-- Tab: Embed Builder -->
+            <section id="embed-builder" class="tab-content active">
+                <div class="builder-grid">
+                    <!-- Form Column -->
+                    <div class="panel form-panel">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-sliders"></i> Embed Settings</h3>
+                        </div>
+                        <div class="panel-body scrollable">
+                            <!-- Channel Target -->
+                            <div class="form-group">
+                                <label for="embed-channel">Target Channel (Saved Name, ID or Mention)</label>
+                                <input type="text" id="embed-channel" placeholder="e.g. general, announcements, #news or 12345678" value="announcements">
+                            </div>
+
+                            <!-- Title & Description -->
+                            <div class="form-group">
+                                <label for="embed-title">Embed Title</label>
+                                <input type="text" id="embed-title" placeholder="Type a catchy title..." value="🚀 Server Update & Announcements">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="embed-description">Embed Description</label>
+                                <textarea id="embed-description" rows="5" placeholder="Type main message content here (supports markdown)...">We have successfully completed our server upgrades. All integrated features are now fully functional.
+
+Thank you for being part of **e.Network**!</textarea>
+                            </div>
+
+                            <!-- Color Selector -->
+                            <div class="form-group">
+                                <label>Accent Color</label>
+                                <div class="color-picker-wrapper">
+                                    <input type="color" id="embed-color" value="#2066f5">
+                                    <input type="text" id="embed-color-hex" value="#2066f5" maxlength="7">
+                                </div>
+                                <div class="preset-colors">
+                                    <button class="preset-btn" style="background-color: #2066f5;" data-color="#2066f5" title="Afterwork Blue"></button>
+                                    <button class="preset-btn" style="background-color: #9d4edd;" data-color="#9d4edd" title="Neon Purple"></button>
+                                    <button class="preset-btn" style="background-color: #06d6a0;" data-color="#06d6a0" title="Emerald Green"></button>
+                                    <button class="preset-btn" style="background-color: #f77f00;" data-color="#f77f00" title="Bright Coral"></button>
+                                    <button class="preset-btn" style="background-color: #d62828;" data-color="#d62828" title="Crimson Red"></button>
+                                </div>
+                            </div>
+
+                            <!-- Images -->
+                            <div class="form-group">
+                                <label for="embed-thumbnail">Thumbnail URL (Top-Right Image)</label>
+                                <input type="url" id="embed-thumbnail" placeholder="https://example.com/logo.png">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="embed-image">Large Image URL (Bottom Main Image)</label>
+                                <input type="url" id="embed-image" placeholder="https://example.com/banner.png">
+                            </div>
+
+                            <!-- Fields Section -->
+                            <div class="fields-section">
+                                <div class="section-header">
+                                    <h4>Embed Fields</h4>
+                                    <button type="button" id="add-field-btn" class="btn-sm"><i class="fa-solid fa-plus"></i> Add Field</button>
+                                </div>
+                                <div id="fields-container" class="fields-container">
+                                    <!-- Dynamic fields loaded here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Preview Column -->
+                    <div class="panel preview-panel">
+                        <div class="panel-header">
+                            <h3><i class="fa-brands fa-discord"></i> Discord Live Preview</h3>
+                        </div>
+                        <div class="panel-body discord-theme">
+                            <div class="discord-message">
+                                <div class="discord-avatar">
+                                    <i class="fa-solid fa-gamepad"></i>
+                                </div>
+                                <div class="discord-content">
+                                    <div class="discord-author">
+                                        <span class="author-name">Afterwork</span>
+                                        <span class="bot-tag">BOT</span>
+                                        <span class="timestamp">Today at 12:00 PM</span>
+                                    </div>
+                                    
+                                    <!-- Discord Embed Wrapper -->
+                                    <div class="discord-embed" id="preview-embed-border">
+                                        <div class="discord-embed-content">
+                                            <div class="discord-embed-text">
+                                                <div class="discord-embed-title" id="preview-title">🚀 Server Update & Announcements</div>
+                                                <div class="discord-embed-description" id="preview-description">We have successfully completed our server upgrades. All integrated features are now fully functional.</div>
+                                                
+                                                <!-- Fields Grid -->
+                                                <div class="discord-embed-fields" id="preview-fields">
+                                                    <!-- Dynamic Preview Fields -->
+                                                </div>
+                                            </div>
+                                            <!-- Thumbnail -->
+                                            <div class="discord-embed-thumbnail-container" id="preview-thumbnail-container" style="display: none;">
+                                                <img class="discord-embed-thumbnail" id="preview-thumbnail" src="" alt="">
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Image -->
+                                        <div class="discord-embed-image-container" id="preview-image-container" style="display: none;">
+                                            <img class="discord-embed-image" id="preview-image" src="" alt="">
+                                        </div>
+                                        
+                                        <!-- Footer -->
+                                        <div class="discord-embed-footer">
+                                            <span>e.Network | Official Announcement</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Export Bar -->
+                <div class="export-bar panel">
+                    <div class="command-output-wrapper">
+                        <div class="output-header">
+                            <span><i class="fa-solid fa-terminal"></i> Paste Command (Click to copy)</span>
+                            <div class="action-buttons">
+                                <button class="copy-btn secondary" id="copy-json-btn">
+                                    <i class="fa-solid fa-code"></i> Copy JSON Payload
+                                </button>
+                                <button class="copy-btn primary" id="copy-cmd-btn">
+                                    <i class="fa-solid fa-copy"></i> Copy Full Command
+                                </button>
+                            </div>
+                        </div>
+                        <div class="code-block-container">
+                            <pre><code id="generated-command" class="fira-font"></code></pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: RSS Manager -->
+            <section id="rss-manager" class="tab-content">
+                <div class="rss-layout">
+                    <div class="panel rss-form-panel">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-plus-circle"></i> Add RSS Subscription</h3>
+                        </div>
+                        <div class="panel-body">
+                            <div class="form-group">
+                                <label for="rss-name">Feed Name</label>
+                                <input type="text" id="rss-name" placeholder="e.g. github-news or anime-releases" value="github-news">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="rss-channel">Target Channel ID / Mention</label>
+                                <input type="text" id="rss-channel" placeholder="e.g. #announcements, #news, or 12345678" value="#announcements">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="rss-url">Feed RSS/Atom URL</label>
+                                <input type="url" id="rss-url" placeholder="e.g. https://github.blog/feed/" value="https://github.blog/feed/">
+                            </div>
+
+                            <div class="rss-output-box">
+                                <div class="command-card">
+                                    <div class="card-title">
+                                        <span><i class="fa-solid fa-square-plus"></i> Add Feed Command</span>
+                                        <button class="icon-copy-btn" id="copy-rss-add-btn" title="Copy Command"><i class="fa-solid fa-copy"></i></button>
+                                    </div>
+                                    <pre><code id="rss-add-cmd" class="fira-font">[p]afterwork rss add github-news #announcements https://github.blog/feed/</code></pre>
+                                </div>
+                                
+                                <div class="command-card">
+                                    <div class="card-title">
+                                        <span><i class="fa-solid fa-square-minus"></i> Remove Feed Command</span>
+                                        <button class="icon-copy-btn" id="copy-rss-remove-btn" title="Copy Command"><i class="fa-solid fa-copy"></i></button>
+                                    </div>
+                                    <pre><code id="rss-remove-cmd" class="fira-font">[p]afterwork rss remove github-news</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Quick Deploy -->
+            <section id="quick-deploy" class="tab-content">
+                <div class="deploy-grid">
+                    <!-- Deploy All Card -->
+                    <div class="deploy-card main-card panel">
+                        <div class="card-icon"><i class="fa-solid fa-cubes"></i></div>
+                        <div class="card-info">
+                            <h3>Deploy All Modules</h3>
+                            <p>Pin and deploy configuration control hubs for all 6 integrated modules sequentially.</p>
+                            <pre><code class="fira-font">[p]afterwork deploy</code></pre>
+                        </div>
+                        <button class="deploy-copy-btn" data-copy="[p]afterwork deploy"><i class="fa-solid fa-copy"></i> Copy</button>
+                    </div>
+
+                    <!-- Individual Modules -->
+                    <div class="deploy-subgrid">
+                        <!-- Card: Audio -->
+                        <div class="deploy-card sub-card panel">
+                            <div class="card-header-icon"><i class="fa-solid fa-music"></i></div>
+                            <h4>Audio Hub</h4>
+                            <p>Player controls (play, pause, skip, playlist database).</p>
+                            <pre><code class="fira-font">[p]afterwork deploy audio</code></pre>
+                            <button class="deploy-copy-btn btn-sm" data-copy="[p]afterwork deploy audio"><i class="fa-solid fa-copy"></i> Copy</button>
+                        </div>
+                        
+                        <!-- Card: Embed -->
+                        <div class="deploy-card sub-card panel">
+                            <div class="card-header-icon"><i class="fa-solid fa-envelope-open-text"></i></div>
+                            <h4>Embed Hub</h4>
+                            <p>Deploy control panel for sending announcement JSONs.</p>
+                            <pre><code class="fira-font">[p]afterwork deploy embed</code></pre>
+                            <button class="deploy-copy-btn btn-sm" data-copy="[p]afterwork deploy embed"><i class="fa-solid fa-copy"></i> Copy</button>
+                        </div>
+                        
+                        <!-- Card: RSS -->
+                        <div class="deploy-card sub-card panel">
+                            <div class="card-header-icon"><i class="fa-solid fa-square-rss"></i></div>
+                            <h4>RSS Hub</h4>
+                            <p>Configuration panel for RSS/Atom feed monitors.</p>
+                            <pre><code class="fira-font">[p]afterwork deploy rss</code></pre>
+                            <button class="deploy-copy-btn btn-sm" data-copy="[p]afterwork deploy rss"><i class="fa-solid fa-copy"></i> Copy</button>
+                        </div>
+                        
+                        <!-- Card: TV -->
+                        <div class="deploy-card sub-card panel">
+                            <div class="card-header-icon"><i class="fa-solid fa-tv"></i></div>
+                            <h4>TV Hub</h4>
+                            <p>Radarr and Sonarr release notification parser config.</p>
+                            <pre><code class="fira-font">[p]afterwork deploy tv</code></pre>
+                            <button class="deploy-copy-btn btn-sm" data-copy="[p]afterwork deploy tv"><i class="fa-solid fa-copy"></i> Copy</button>
+                        </div>
+                        
+                        <!-- Card: Voice -->
+                        <div class="deploy-card sub-card panel">
+                            <div class="card-header-icon"><i class="fa-solid fa-volume-high"></i></div>
+                            <h4>Voice Hub</h4>
+                            <p>Temp room custom controls (kick, transfer, privacy).</p>
+                            <pre><code class="fira-font">[p]afterwork deploy voice</code></pre>
+                            <button class="deploy-copy-btn btn-sm" data-copy="[p]afterwork deploy voice"><i class="fa-solid fa-copy"></i> Copy</button>
+                        </div>
+                        
+                        <!-- Card: Hide -->
+                        <div class="deploy-card sub-card panel">
+                            <div class="card-header-icon"><i class="fa-solid fa-eye-slash"></i></div>
+                            <h4>Hide Category</h4>
+                            <p>Admin category quick visibility panel controller.</p>
+                            <pre><code class="fira-font">[p]afterwork deploy hide</code></pre>
+                            <button class="deploy-copy-btn btn-sm" data-copy="[p]afterwork deploy hide"><i class="fa-solid fa-copy"></i> Copy</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast">
+        <i class="fa-solid fa-circle-check"></i>
+        <span id="toast-message">Copied to clipboard!</span>
+    </div>
+
+    <!-- Custom Script -->
+    <script src="app.js"></script>
+</body>
+</html>

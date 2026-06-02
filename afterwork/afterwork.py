@@ -1112,6 +1112,58 @@ class Afterwork(commands.Cog, name="Afterwork"):
         """List all available subcommands for Afterwork."""
         await ctx.send_help(self.afterwork_group)
 
+    @afterwork_group.command(name="embed")
+    async def afterwork_embed_cmd(self, ctx: commands.Context, channel_name: str, *, json_payload: str):
+        """Send a custom JSON embed to a named channel or a specific channel (ID/Mention)."""
+        channel_name = channel_name.strip().lower()
+        named_channels = await self.config.guild(ctx.guild).embed_named_channels()
+        channel_id = named_channels.get(channel_name)
+        
+        channel = None
+        if channel_id:
+            channel = ctx.guild.get_channel(channel_id)
+        else:
+            # Try to resolve as channel mention or ID
+            try:
+                channel = await commands.TextChannelConverter().convert(ctx, channel_name)
+            except commands.BadArgument:
+                try:
+                    channel = await commands.ThreadConverter().convert(ctx, channel_name)
+                except commands.BadArgument:
+                    pass
+
+        if not channel:
+            return await ctx.send(f"❌ **Error:** Target channel or saved channel '{channel_name}' not found.")
+            
+        try:
+            data = json.loads(json_payload)
+        except json.JSONDecodeError as e:
+            return await ctx.send(f"❌ **Error Parsing JSON:** `{e.msg}`")
+            
+        embed = discord.Embed()
+        if "title" in data: embed.title = data["title"]
+        if "description" in data: embed.description = data["description"]
+        if "color" in data:
+            try: embed.color = discord.Color(int(str(data["color"]), 16))
+            except ValueError: embed.color = discord.Color.blue()
+        else:
+            embed.color = discord.Color.blue()
+            
+        if "fields" in data and isinstance(data["fields"], list):
+            for field in data["fields"]:
+                embed.add_field(name=field.get("name", "Field"), value=field.get("value", "..."), inline=field.get("inline", False))
+                
+        if "thumbnail" in data: embed.set_thumbnail(url=data["thumbnail"])
+        if "image" in data: embed.set_image(url=data["image"])
+        
+        embed.set_footer(text="e.Network | Official Announcement")
+        
+        try:
+            await channel.send(embed=embed)
+            await ctx.tick()
+        except discord.Forbidden:
+            await ctx.send("❌ **Error:** Lacking permission to send messages in target channel.")
+
     # --- DEPLOY SUBCOMMAND GROUP ---
 
     @afterwork_group.group(name="deploy", invoke_without_command=True)
@@ -1161,6 +1213,39 @@ class Afterwork(commands.Cog, name="Afterwork"):
         if ctx.invoked_subcommand is None:
             await ctx.send_help()
 
+    @afterwork_rss_group.command(name="add")
+    async def afterwork_rss_add(self, ctx: commands.Context, feed_name: str, channel: Union[discord.TextChannel, discord.Thread], url: str):
+        """Adds a new RSS feed subscription to a channel."""
+        feed_name = feed_name.lower().strip()
+        
+        if not channel.permissions_for(ctx.guild.me).send_messages:
+             return await ctx.send(f"❌ **Error:** I do not have permission to post messages in {channel.mention}.")
+
+        await ctx.typing()
+        new_feed_data = await self._add_feed_to_config(ctx.guild, feed_name, channel.id, url)
+        if isinstance(new_feed_data, str):
+             return await ctx.send(f"❌ **Error:** {new_feed_data}")
+
+        async with self.config.guild(ctx.guild).rss_feeds() as feeds:
+            feeds.append(new_feed_data)
+
+        # Update setup panel embed if it exists
+        setup_message_id = await self.config.guild(ctx.guild).rss_setup_message_id()
+        if setup_message_id:
+            for ch in ctx.guild.text_channels:
+                try:
+                    msg = await ch.fetch_message(setup_message_id)
+                    embed = msg.embeds[0]
+                    embed.set_footer(text=_get_admin_footer(ctx, "Feed added (Command)"))
+                    await _update_rss_setup_embed(self, ctx.guild, embed)
+                    view = RssSetupView(self, initial_enabled=await self.config.guild(ctx.guild).rss_enabled())
+                    await msg.edit(embed=embed, view=view)
+                    break
+                except Exception:
+                    continue
+
+        await ctx.send(f"✅ Feed **{feed_name}** added successfully for {channel.mention}!")
+
     @afterwork_rss_group.command(name="remove")
     async def afterwork_rss_remove(self, ctx, feed_name: str):
         """Removes an RSS feed by its configured name."""
@@ -1170,6 +1255,20 @@ class Afterwork(commands.Cog, name="Afterwork"):
             feeds[:] = [f for f in feeds if f['name'] != feed_name]
             
             if len(feeds) < initial_len:
+                # Update setup panel embed if it exists
+                setup_message_id = await self.config.guild(ctx.guild).rss_setup_message_id()
+                if setup_message_id:
+                    for ch in ctx.guild.text_channels:
+                        try:
+                            msg = await ch.fetch_message(setup_message_id)
+                            embed = msg.embeds[0]
+                            embed.set_footer(text=_get_admin_footer(ctx, "Feed removed (Command)"))
+                            await _update_rss_setup_embed(self, ctx.guild, embed)
+                            view = RssSetupView(self, initial_enabled=await self.config.guild(ctx.guild).rss_enabled())
+                            await msg.edit(embed=embed, view=view)
+                            break
+                        except Exception:
+                            continue
                 await ctx.send(f"✅ Feed **{feed_name}** removed.")
             else:
                 await ctx.send(f"❌ Feed **{feed_name}** not found.")
