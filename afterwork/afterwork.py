@@ -900,20 +900,20 @@ class HideSetupView(discord.ui.View):
         category_id = settings.get('hide_managed_category_id')
         category = interaction.guild.get_channel(category_id)
         
-        if not category or not isinstance(category, discord.CategoryChannel) or not category.channels:
-            return await interaction.followup.send("❌ **Error:** No category is configured or the category is empty.")
+        if not category or not isinstance(category, discord.CategoryChannel):
+            return await interaction.followup.send("❌ **Error:** No category is configured.")
 
         is_currently_hidden = await self.cog._is_managed_category_hidden(interaction.guild)
         perm_action = None
         
         if is_currently_hidden: 
             action_verb = "shown (unhidden)"
-            perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(role, overwrite=None, reason=reason)
+            perm_action = lambda target, role, reason: target.set_permissions(role, view_channel=None, reason=reason)
             new_button_label = "Hide"
             new_button_style = discord.ButtonStyle.danger
         else: 
             action_verb = "hidden"
-            perm_action = lambda ch, role, view_channel, reason: ch.set_permissions(role, view_channel=False, reason=reason)
+            perm_action = lambda target, role, reason: target.set_permissions(role, view_channel=False, reason=reason)
             new_button_label = "Show"
             new_button_style = discord.ButtonStyle.success
         
@@ -1990,17 +1990,10 @@ class Afterwork(commands.Cog, name="Afterwork"):
         if not category or not isinstance(category, discord.CategoryChannel):
             return False 
 
-        channels_to_manage = [
-            c for c in category.channels if isinstance(c, (discord.TextChannel, discord.VoiceChannel))
-        ]
-        if not channels_to_manage:
-            return False
-
-        first_channel = channels_to_manage[0]
         admin_roles = await self._get_admin_roles(guild)
         for role in admin_roles:
-            if role < guild.me.top_role:
-                overwrite = first_channel.overwrites_for(role)
+            if role not in guild.me.roles and role != guild.default_role:
+                overwrite = category.overwrites_for(role)
                 if overwrite.view_channel is False:
                     return True
         return False
@@ -2013,7 +2006,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
         return admin_roles
 
     async def _apply_perms_to_category(self, guild: discord.Guild, perm_action: callable):
-        bot_member = guild.me
         settings = await self.config.guild(guild).all()
         category_id = settings.get('hide_managed_category_id')
         
@@ -2027,17 +2019,26 @@ class Afterwork(commands.Cog, name="Afterwork"):
             return
 
         admin_roles = await self._get_admin_roles(guild)
+
+        # Apply permissions directly to the Category Channel
+        for role in admin_roles:
+            if role not in guild.me.roles and role != guild.default_role:
+                try:
+                    await perm_action(category, role, reason="Managed by AfterworkHide")
+                except discord.Forbidden:
+                    log.warning(f"Could not modify admin perms for category '{category.name}' and role '{role.name}'.")
+
+        # Apply permissions to all text and voice channels within the category
         channels_to_manage = [
             c for c in category.channels if isinstance(c, (discord.TextChannel, discord.VoiceChannel))
         ]
-
         for channel in channels_to_manage:
             for role in admin_roles:
-                if role < bot_member.top_role:
+                if role not in guild.me.roles and role != guild.default_role:
                     try:
-                        await perm_action(channel, role, view_channel=False, reason="Managed by AfterworkHide")
+                        await perm_action(channel, role, reason="Managed by AfterworkHide")
                     except discord.Forbidden:
-                        log.warning(f"Could not modify admin perms for '{channel.name}'.")
+                        log.warning(f"Could not modify admin perms for channel '{channel.name}' and role '{role.name}'.")
 
     # --- UNIFIED EVENT LISTENERS ---
 
