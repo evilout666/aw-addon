@@ -1666,10 +1666,23 @@ class Afterwork(commands.Cog, name="Afterwork"):
             # Wait a moment to allow channel state to propagate
             await asyncio.sleep(0.5)
             try:
+                # Refresh the member object to ensure cache is hot
+                fresh_member = guild.get_member(member.id)
+                if fresh_member:
+                    member = fresh_member
+
+                if not member.voice or not member.voice.channel:
+                    raise discord.ClientException(f"Member {member.name} is not connected to a voice channel in the bot's cache.")
+
                 await member.move_to(new_voice_channel, reason="Afterwork AutoRoom: moving owner")
-            except discord.HTTPException:
-                try: await new_voice_channel.delete()
-                except: pass
+            except Exception as e:
+                log.error(f"Error moving member to new voice channel: {e}", exc_info=True)
+                await _send_owner_dm(self.bot, f"❌ Failed to move **{member.name}** to newly created channel **{new_voice_channel.name}**.\n**Error:** `{e.__class__.__name__}: {e}`")
+                try:
+                    await new_voice_channel.delete(reason="Afterwork AutoRoom: clean up after move failed")
+                except Exception as del_err:
+                    log.error(f"Failed to delete channel: {del_err}", exc_info=True)
+                    await _send_owner_dm(self.bot, f"⚠️ Failed to clean up/delete temporary channel **{new_voice_channel.name}**.\n**Error:** `{del_err.__class__.__name__}: {del_err}`")
                 return
 
             async with self.config.guild(guild).voice_room_channels() as room_channels:
