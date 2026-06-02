@@ -1987,10 +1987,16 @@ class Afterwork(commands.Cog, name="Afterwork"):
         category_id = settings.get('hide_managed_category_id')
         category = guild.get_channel(category_id)
         
-        if not category or not isinstance(category, discord.CategoryChannel) or not category.channels:
+        if not category or not isinstance(category, discord.CategoryChannel):
             return False 
 
-        first_channel = category.channels[0]
+        channels_to_manage = [
+            c for c in category.channels if isinstance(c, (discord.TextChannel, discord.VoiceChannel))
+        ]
+        if not channels_to_manage:
+            return False
+
+        first_channel = channels_to_manage[0]
         admin_roles = await self._get_admin_roles(guild)
         for role in admin_roles:
             if role < guild.me.top_role:
