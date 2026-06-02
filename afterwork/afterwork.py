@@ -1642,79 +1642,43 @@ class Afterwork(commands.Cog, name="Afterwork"):
         if not config.get("voice_enabled"): return
         source_id = config.get("voice_source_id")
 
-        if before.channel == after.channel:
-            return
-
-        # 1. Spawn a new room when a user joins the source channel
         if after.channel and after.channel.id == source_id:
-            source_channel = guild.get_channel(source_id)
-            if not source_channel: return
-            
-            category = source_channel.category
-            channel_name = f"💬 {member.display_name}"
-            
             try:
-                new_voice_channel = await guild.create_voice_channel(
-                    name=channel_name,
-                    category=category,
-                    reason=f"Afterwork AutoRoom: created for {member.name}"
+                def check(m, b, a):
+                    return (
+                        m.id == member.id
+                        and b.channel and b.channel.id == source_id
+                        and a.channel is not None
+                        and a.channel.id != source_id
+                    )
+
+                _, _, moved_to_state = await self.bot.wait_for(
+                    "voice_state_update", check=check, timeout=15.0
                 )
-            except discord.Forbidden:
-                await _send_owner_dm(self.bot, f"Failed to create AutoRoom voice channel in {guild.name} due to missing permissions.")
-                return
+                new_voice_channel = moved_to_state.channel
 
-            # Wait a moment to allow channel state to propagate
-            await asyncio.sleep(0.5)
-            try:
-                # Refresh the member object to ensure cache is hot
-                fresh_member = guild.get_member(member.id)
-                if fresh_member:
-                    member = fresh_member
+                async with self.config.guild(guild).voice_room_channels() as room_channels:
+                    room_channels[str(new_voice_channel.id)] = {"owner_id": member.id}
 
-                if not member.voice or not member.voice.channel:
-                    raise discord.ClientException(f"Member {member.name} is not connected to a voice channel in the bot's cache.")
+                embed = discord.Embed(
+                    title="Voice Channel Controls",
+                    description=f"You are the owner of **{new_voice_channel.name}**.",
+                    color=discord.Color.blue()
+                )
+                embed.add_field(name="Current Owner", value=member.mention, inline=False)
+                embed.add_field(name="Controls", value="Use buttons to manage members and privacy.", inline=False)
+                embed.set_footer(text="e.Network | Available Right Now on Jellyfin")
 
-                await member.move_to(new_voice_channel, reason="Afterwork AutoRoom: moving owner")
-            except Exception as e:
-                log.error(f"Error moving member to new voice channel: {e}", exc_info=True)
-                await _send_owner_dm(self.bot, f"❌ Failed to move **{member.name}** to newly created channel **{new_voice_channel.name}**.\n**Error:** `{e.__class__.__name__}: {e}`")
-                try:
-                    await new_voice_channel.delete(reason="Afterwork AutoRoom: clean up after move failed")
-                except Exception as del_err:
-                    log.error(f"Failed to delete channel: {del_err}", exc_info=True)
-                    await _send_owner_dm(self.bot, f"⚠️ Failed to clean up/delete temporary channel **{new_voice_channel.name}**.\n**Error:** `{del_err.__class__.__name__}: {del_err}`")
-                return
+                view = await VoiceChannelButtons.create(self, new_voice_channel)
+                await new_voice_channel.send(content=member.mention, embed=embed, view=view)
 
-            async with self.config.guild(guild).voice_room_channels() as room_channels:
-                room_channels[str(new_voice_channel.id)] = {"owner_id": member.id}
-
-            embed = discord.Embed(
-                title="Voice Channel Controls",
-                description=f"You are the owner of **{new_voice_channel.name}**.",
-                color=discord.Color.blue()
-            )
-            embed.add_field(name="Current Owner", value=member.mention, inline=False)
-            embed.add_field(name="Controls", value="Use buttons to manage members and privacy.", inline=False)
-            embed.set_footer(text="e.Network | Available Right Now on Jellyfin")
-            
-            view = await VoiceChannelButtons.create(self, new_voice_channel)
-            await new_voice_channel.send(content=member.mention, embed=embed, view=view)
-
-        # 2. Delete empty custom rooms when a user leaves
-        if before.channel:
-            room_channels = config.get("voice_room_channels", {})
-            if str(before.channel.id) in room_channels:
-                # Exclude the member who just left, as they might still be in the cached members list
-                non_bots = [m for m in before.channel.members if not m.bot and m.id != member.id]
-                if len(non_bots) == 0:
-                    try:
-                        await before.channel.delete(reason="Afterwork AutoRoom: empty room deleted")
-                    except (discord.NotFound, discord.Forbidden):
-                        pass
-                    
-                    async with self.config.guild(guild).voice_room_channels() as rooms:
-                        if str(before.channel.id) in rooms:
-                            del rooms[str(before.channel.id)]
+            except asyncio.TimeoutError:
+                message = (
+                    f"User **{member.display_name}** joined the Source VC but was not moved within 15 seconds. "
+                    "This usually means the external AutoRoom cog failed to create the channel."
+                )
+                log.warning(message)
+                await _send_owner_dm(self.bot, f"Guild: {guild.name} (ID: {guild.id})\n{message}")
 
     # --- TV EMBED WEBHOOK REFORMATTER METHODS ---
 
