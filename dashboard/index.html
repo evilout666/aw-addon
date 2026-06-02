@@ -40,6 +40,10 @@
                     <i class="fa-solid fa-rocket"></i>
                     <span>Quick Deployer</span>
                 </button>
+                <button class="nav-btn" data-tab="documentation">
+                    <i class="fa-solid fa-book"></i>
+                    <span>Documentation</span>
+                </button>
             </nav>
             
             <div class="sidebar-footer">
@@ -319,6 +323,382 @@ See you out in the deep desert. *The spice must flow!* 🏜️</textarea>
                             <p>Admin category quick visibility panel controller.</p>
                             <pre><code class="fira-font">[p]afterwork deploy hide</code></pre>
                             <button class="deploy-copy-btn btn-sm" data-copy="[p]afterwork deploy hide"><i class="fa-solid fa-copy"></i> Copy</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Documentation -->
+            <section id="documentation" class="tab-content">
+                <div class="doc-layout">
+                    <!-- Internal Sticky Sidebar -->
+                    <aside class="doc-nav-panel panel">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-compass"></i> Modules</h3>
+                        </div>
+                        <div class="panel-body">
+                            <ul class="doc-nav-list">
+                                <li class="doc-nav-item active" data-doc-target="doc-general">
+                                    <a href="#doc-general"><i class="fa-solid fa-circle-info"></i> General</a>
+                                </li>
+                                <li class="doc-nav-item" data-doc-target="doc-audio">
+                                    <a href="#doc-audio"><i class="fa-solid fa-music"></i> Audio Module</a>
+                                </li>
+                                <li class="doc-nav-item" data-doc-target="doc-embed">
+                                    <a href="#doc-embed"><i class="fa-solid fa-bullhorn"></i> Embed Module</a>
+                                </li>
+                                <li class="doc-nav-item" data-doc-target="doc-rss">
+                                    <a href="#doc-rss"><i class="fa-solid fa-rss"></i> RSS Module</a>
+                                </li>
+                                <li class="doc-nav-item" data-doc-target="doc-tv">
+                                    <a href="#doc-tv"><i class="fa-solid fa-tv"></i> TV Module</a>
+                                </li>
+                                <li class="doc-nav-item" data-doc-target="doc-voice">
+                                    <a href="#doc-voice"><i class="fa-solid fa-volume-high"></i> Voice Module</a>
+                                </li>
+                                <li class="doc-nav-item" data-doc-target="doc-hide">
+                                    <a href="#doc-hide"><i class="fa-solid fa-eye-slash"></i> Hide Module</a>
+                                </li>
+                            </ul>
+                        </div>
+                    </aside>
+
+                    <!-- Main Documentation Content -->
+                    <div class="doc-content-panel">
+                        <!-- Section: General -->
+                        <div id="doc-general" class="panel doc-card">
+                            <h3><i class="fa-solid fa-circle-info"></i> General & Deployment</h3>
+                            <p>The Afterwork cog is a unified administrative system designed for e.Network server operations. It runs on a prefix-based architecture (default prefix is represented as <code>[p]</code>). All primary commands are group commands and require <strong>Bot Owner</strong> permissions.</p>
+                            
+                            <div class="doc-subtitle">Base Commands</div>
+                            <div class="doc-command-list">
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Displays the System Status Dashboard, showing real-time configuration status, monitored feeds, active voice rooms, and visibility settings for all modules.</div>
+                                </div>
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork help</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Lists all subcommands registered under the Afterwork command group with inline syntax help.</div>
+                                </div>
+                            </div>
+
+                            <div class="doc-subtitle">Deployment Commands</div>
+                            <p>Deployment commands spawn persistent Discord <code>Embed + Button/Select Menu</code> panels that allow server staff or users to interact with modules without having to type commands.</p>
+                            <div class="doc-command-list">
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork deploy</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Sequentially deploys and pins all 6 module management panels in the current channel. Any previously deployed panels will be deleted to keep channels clean.</div>
+                                </div>
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork deploy [module]</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Deploys/pins a specific module's management panel in the current channel.</div>
+                                    <table class="doc-param-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Parameter</th>
+                                                <th>Type</th>
+                                                <th>Description</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td class="param-name">module</td>
+                                                <td class="param-type">string</td>
+                                                <td>Must be one of: <code>audio</code>, <code>embed</code>, <code>rss</code>, <code>tv</code>, <code>voice</code>, <code>hide</code>.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section: Audio -->
+                        <div id="doc-audio" class="panel doc-card">
+                            <h3><i class="fa-solid fa-music"></i> Audio Module</h3>
+                            <p>Integrates Red-DiscordBot's Audio system into a single persistent playback terminal. Provides a web-dashboard-like control station inside Discord for playing predefined music streams.</p>
+                            
+                            <div class="doc-subtitle">Commands</div>
+                            <div class="doc-command-list">
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork deploy audio</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Spawns the music configuration panel and playback controls message.</div>
+                                </div>
+                            </div>
+
+                            <div class="doc-subtitle">Interactive Panel Functions</div>
+                            <div class="doc-panel-features">
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-play"></i> Enable / Disable System</h5>
+                                    <p>Toggles the bot's auto-play service. When active, the bot joins the specified voice channel and begins playing chosen streams.</p>
+                                </div>
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-volume-high"></i> Set Music Channel</h5>
+                                    <p>Opens a modal where you paste a Voice Channel ID to bind the music bot's streaming target.</p>
+                                </div>
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-list-ul"></i> Add/Remove Playlist</h5>
+                                    <p>Spawns a modal to add/remove YouTube/Spotify URLs cataloged under custom names for dropdown playback selection.</p>
+                                </div>
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-forward"></i> Playback Control Bar</h5>
+                                    <p>Buttons to instantly <code>Pause</code>, <code>Resume</code>, <code>Skip</code> current tracks, or <code>Stop & Disconnect</code> the bot from the music channel.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section: Embed -->
+                        <div id="doc-embed" class="panel doc-card">
+                            <h3><i class="fa-solid fa-bullhorn"></i> Embed Module</h3>
+                            <p>Allows administrators to design and publish beautiful rich embeds to announcements or general channels using custom JSON structures generated directly from this dashboard.</p>
+                            
+                            <div class="doc-subtitle">Commands</div>
+                            <div class="doc-command-list">
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork deploy embed</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Deploys the persistent Embed Shortcuts panel to manage named channel aliases.</div>
+                                </div>
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork embed [channel] [json]</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Publishes an embed formatted by the JSON string parameter to the specified channel (accepts channel mention, ID, or saved name).</div>
+                                    <table class="doc-param-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Parameter</th>
+                                                <th>Type</th>
+                                                <th>Description</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td class="param-name">channel</td>
+                                                <td class="param-type">string / mention</td>
+                                                <td>Target channel ID, mention, or a configured channel name alias.</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="param-name">json</td>
+                                                <td class="param-type">JSON Block</td>
+                                                <td>The payload specifying fields like: title, description, color, thumbnail, image, and fields.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="doc-subtitle">Interactive Panel Functions</div>
+                            <div class="doc-panel-features">
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-link"></i> Add Channel Alias</h5>
+                                    <p>Opens a modal to register a shortcut text key (e.g. <code>news</code>) mapped to a specific channel ID, making embed distribution faster.</p>
+                                </div>
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-trash-can"></i> Remove Alias</h5>
+                                    <p>Prompts a modal to delete a saved channel shortcut key from the bot's configuration storage.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section: RSS -->
+                        <div id="doc-rss" class="panel doc-card">
+                            <h3><i class="fa-solid fa-rss"></i> RSS Module</h3>
+                            <p>Monitors external RSS or Atom feeds (e.g. gaming blogs, developer news, github releases) in the background and prints new posts in specific channels automatically.</p>
+                            
+                            <div class="doc-subtitle">Commands</div>
+                            <div class="doc-command-list">
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork deploy rss</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Spawns the RSS settings control panel.</div>
+                                </div>
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork rss add [feed_name] [channel] [url]</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Subscribes a channel to a news feed. Automatically detects and parses incoming posts.</div>
+                                    <table class="doc-param-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Parameter</th>
+                                                <th>Type</th>
+                                                <th>Description</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td class="param-name">feed_name</td>
+                                                <td class="param-type">string</td>
+                                                <td>A unique slug label to identify this feed configuration.</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="param-name">channel</td>
+                                                <td class="param-type">channel mention</td>
+                                                <td>Discord channel where feed alerts should be printed.</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="param-name">url</td>
+                                                <td class="param-type">string (URL)</td>
+                                                <td>Valid RSS or Atom XML link.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork rss remove [feed_name]</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Deletes an active RSS/Atom feed subscription from the tracking list.</div>
+                                    <table class="doc-param-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Parameter</th>
+                                                <th>Type</th>
+                                                <th>Description</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td class="param-name">feed_name</td>
+                                                <td class="param-type">string</td>
+                                                <td>The name slug assigned to the subscription.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="doc-subtitle">Interactive Panel Functions</div>
+                            <div class="doc-panel-features">
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-power-off"></i> Toggle Feeds Loop</h5>
+                                    <p>Toggles the background scraper. Enables or pauses background checks for all feed subscriptions globally without losing feed data.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section: TV -->
+                        <div id="doc-tv" class="panel doc-card">
+                            <h3><i class="fa-solid fa-tv"></i> TV Module (Sonarr/Radarr Alerts)</h3>
+                            <p>Creates specialized webhook integration endpoints for Radarr and Sonarr instances to notify server users when new movies or TV episodes are released, formatting notifications cleanly.</p>
+                            
+                            <div class="doc-subtitle">Commands</div>
+                            <div class="doc-command-list">
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork deploy tv</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Deploys the TV alerts settings panel, providing instructions and endpoints for webhooks.</div>
+                                </div>
+                            </div>
+
+                            <div class="doc-subtitle">Interactive Panel Functions</div>
+                            <div class="doc-panel-features">
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-toggle-on"></i> Enable Webhooks</h5>
+                                    <p>Toggles Sonarr/Radarr webhook event parsing. When disabled, the bot rejects movie/show alert triggers.</p>
+                                </div>
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-folder-open"></i> Set Alert Channel</h5>
+                                    <p>Opens a text input modal to set the channel ID where all media notifications are sent.</p>
+                                </div>
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-plug"></i> Endpoint Integrations</h5>
+                                    <p>Processes incoming payloads to render cards with poster images, season info, and direct links dynamically.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section: Voice -->
+                        <div id="doc-voice" class="panel doc-card">
+                            <h3><i class="fa-solid fa-volume-high"></i> Voice Module (AutoRoom Controllers)</h3>
+                            <p>Synchronizes with the server's <code>AutoRoom</code> cog to let users who join a generator voice channel create their own temporary rooms, giving creators personal moderation controls inside Discord.</p>
+                            
+                            <div class="doc-subtitle">Commands</div>
+                            <div class="doc-command-list">
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork deploy voice</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Deploys the main Voice Module settings controller.</div>
+                                </div>
+                            </div>
+
+                            <div class="doc-subtitle">Interactive Panel Functions</div>
+                            <div class="doc-panel-features">
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-sliders"></i> Toggle AutoRoom Sync</h5>
+                                    <p>Enables or disables tracking of temporary rooms created by AutoRoom. Essential for active controls.</p>
+                                </div>
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-circle-nodes"></i> Set Join Channel ID</h5>
+                                    <p>Opens a modal to configure the generator voice channel (e.g. <code>➕︱CREATE</code>) which users join to trigger room creation.</p>
+                                </div>
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-user-shield"></i> Room Owner Controls</h5>
+                                    <p>When a temporary room is active, a control panel message provides the room owner buttons to:
+                                        <br>• <strong>Make Private / Public</strong> (toggle default connection permission)
+                                        <br>• <strong>Transfer Ownership</strong> (demote owner/promote active member)
+                                        <br>• <strong>Kick Member</strong> (force disconnect user and block connection)
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section: Hide -->
+                        <div id="doc-hide" class="panel doc-card">
+                            <h3><i class="fa-solid fa-eye-slash"></i> Hide Module</h3>
+                            <p>Enables a toggle to hide or show an entire category and all text/voice channels contained within it from administrator and channel-manager roles, keeping admin operations private during development or maintenance.</p>
+                            
+                            <div class="doc-subtitle">Commands</div>
+                            <div class="doc-command-list">
+                                <div class="doc-command-item">
+                                    <div class="doc-command-header">
+                                        <span class="doc-command-syntax">[p]afterwork deploy hide</span>
+                                        <span class="doc-badge owner">Owner Only</span>
+                                    </div>
+                                    <div class="doc-command-desc">Deploys the category visibility panel with Category ID setter and the Show / Hide toggle.</div>
+                                </div>
+                            </div>
+
+                            <div class="doc-subtitle">Interactive Panel Functions</div>
+                            <div class="doc-panel-features">
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-folder-open"></i> Category ID Modal</h5>
+                                    <p>Spawns a text input modal to paste the category channel ID to bind as the target of the visibility toggle.</p>
+                                </div>
+                                <div class="doc-feature-item">
+                                    <h5><i class="fa-solid fa-eye"></i> Show / Hide Button</h5>
+                                    <p>Instantly alters permissions overwrites for the target category channel and all contained text/voice channels for roles holding <code>Administrator</code> or <code>Manage Channels</code> permissions:
+                                        <br>• <strong>Hide</strong>: Denies <code>view_channel</code> override.
+                                        <br>• <strong>Show</strong>: Resets <code>view_channel</code> override to neutral.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

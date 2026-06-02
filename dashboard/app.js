@@ -19,6 +19,10 @@ document.addEventListener('DOMContentLoaded', () => {
         'quick-deploy': {
             title: 'Quick Deployer',
             subtitle: 'Copy commands to deploy and set up configuration panels on your server.'
+        },
+        'documentation': {
+            title: 'Documentation',
+            subtitle: 'Complete command reference and function manuals for the Afterwork cog.'
         }
     };
 
@@ -376,6 +380,25 @@ document.addEventListener('DOMContentLoaded', () => {
     initialFields.forEach(f => {
         embedFieldsList.push(f);
         renderFieldEditorItem(f);
+    });
+    
+    // --- Documentation Tab Inner Navigation ---
+    const docNavItems = document.querySelectorAll('.doc-nav-item');
+    docNavItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const targetId = item.getAttribute('data-doc-target');
+            const targetEl = document.getElementById(targetId);
+            
+            if (targetEl) {
+                // Highlight active item
+                docNavItems.forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+                
+                // Scroll target element into view
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
     });
 
     updateEmbedPreview();
