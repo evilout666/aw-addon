@@ -1642,6 +1642,9 @@ class Afterwork(commands.Cog, name="Afterwork"):
         if not config.get("voice_enabled"): return
         source_id = config.get("voice_source_id")
 
+        if before.channel == after.channel:
+            return
+
         # 1. Spawn a new room when a user joins the source channel
         if after.channel and after.channel.id == source_id:
             source_channel = guild.get_channel(source_id)
@@ -1660,6 +1663,8 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 await _send_owner_dm(self.bot, f"Failed to create AutoRoom voice channel in {guild.name} due to missing permissions.")
                 return
 
+            # Wait a moment to allow channel state to propagate
+            await asyncio.sleep(0.5)
             try:
                 await member.move_to(new_voice_channel, reason="Afterwork AutoRoom: moving owner")
             except discord.HTTPException:
@@ -1686,7 +1691,8 @@ class Afterwork(commands.Cog, name="Afterwork"):
         if before.channel:
             room_channels = config.get("voice_room_channels", {})
             if str(before.channel.id) in room_channels:
-                non_bots = [m for m in before.channel.members if not m.bot]
+                # Exclude the member who just left, as they might still be in the cached members list
+                non_bots = [m for m in before.channel.members if not m.bot and m.id != member.id]
                 if len(non_bots) == 0:
                     try:
                         await before.channel.delete(reason="Afterwork AutoRoom: empty room deleted")
