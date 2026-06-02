@@ -120,9 +120,9 @@ if data.get('newfeature_setup_message_id'):
 ```
 
 ### [ ] Step 5: Implement Deploy Subcommands
-Under the **SUBCOMMANDS** section in `Afterwork`, register the deploy command under the main `afterwork` command group:
+Under the **SUBCOMMANDS** section in `Afterwork`, register the deploy command under the `afterwork deploy` command group:
 ```python
-    @afterwork_group.command(name="newfeature")
+    @afterwork_deploy_group.command(name="newfeature")
     async def afterwork_newfeature_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for the New Feature."""
         old_message_id = await self.config.guild(ctx.guild).newfeature_setup_message_id()

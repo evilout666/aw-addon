@@ -1020,12 +1020,159 @@ class Afterwork(commands.Cog, name="Afterwork"):
 
     # --- MAIN COMMAND GROUP ---
 
+    # --- MAIN COMMAND GROUP & STATUS DASHBOARD ---
+
     @commands.group(name="afterwork", invoke_without_command=True)
     @commands.is_owner()
     async def afterwork_group(self, ctx: commands.Context):
-        """Central configuration hub for Afterwork server management."""
+        """Central configuration and status hub for Afterwork server management."""
+        if ctx.invoked_subcommand is None:
+            await self.show_status_dashboard(ctx)
+
+    async def show_status_dashboard(self, ctx: commands.Context):
+        """Displays a summary dashboard of all Afterwork modules and their statuses."""
+        settings = await self.config.guild(ctx.guild).all()
+        embed_color = await ctx.embed_color()
+        
+        embed = discord.Embed(
+            title="📊 Afterwork System Status Dashboard",
+            description="Current status and configuration summary for all integrated modules.",
+            color=embed_color
+        )
+        
+        # 1. Audio
+        audio_enabled = settings.get('audio_is_enabled', False)
+        audio_status = "🟢 Active" if audio_enabled else "🔴 Inactive"
+        audio_vc = settings.get('audio_music_voice_channel_id')
+        audio_vc_name = ctx.guild.get_channel(audio_vc).name if audio_vc and ctx.guild.get_channel(audio_vc) else "Not set"
+        playlists_count = len(settings.get('audio_playlists', {}))
+        embed.add_field(
+            name="🎵 Audio Module",
+            value=f"**Status:** {audio_status}\n**VC:** `{audio_vc_name}`\n**Playlists:** {playlists_count}",
+            inline=True
+        )
+
+        # 2. Embed
+        embed_channels = len(settings.get('embed_named_channels', {}))
+        embed.add_field(
+            name="📝 Embed Module",
+            value=f"**Status:** 🟢 Active\n**Named Channels:** {embed_channels}",
+            inline=True
+        )
+
+        # 3. RSS
+        rss_enabled = settings.get('rss_enabled', False)
+        rss_status = "🟢 Active" if rss_enabled else "🔴 Inactive"
+        rss_feeds_count = len(settings.get('rss_feeds', []))
+        embed.add_field(
+            name="📰 RSS Module",
+            value=f"**Status:** {rss_status}\n**Monitored Feeds:** {rss_feeds_count}",
+            inline=True
+        )
+
+        # 4. TV
+        tv_enabled = settings.get('tv_enabled', False)
+        tv_status = "🟢 Active" if tv_enabled else "🔴 Inactive"
+        tv_dest = settings.get('tv_dest_channel')
+        tv_dest_name = ctx.guild.get_channel(tv_dest).name if tv_dest and ctx.guild.get_channel(tv_dest) else "Not set"
+        embed.add_field(
+            name="📺 TV Module",
+            value=f"**Status:** {tv_status}\n**Dest Channel:** `{tv_dest_name}`",
+            inline=True
+        )
+
+        # 5. Voice
+        voice_enabled = settings.get('voice_enabled', False)
+        voice_status = "🟢 Active" if voice_enabled else "🔴 Inactive"
+        voice_src = settings.get('voice_source_id')
+        voice_src_name = ctx.guild.get_channel(voice_src).name if voice_src and ctx.guild.get_channel(voice_src) else "Not set"
+        active_rooms = len(settings.get('voice_room_channels', {}))
+        embed.add_field(
+            name="🔊 Voice Module",
+            value=f"**Status:** {voice_status}\n**Source VC:** `{voice_src_name}`\n**Active Rooms:** {active_rooms}",
+            inline=True
+        )
+
+        # 6. Hide
+        hide_category = settings.get('hide_managed_category_id')
+        hide_cat_name = ctx.guild.get_channel(hide_category).name if hide_category and ctx.guild.get_channel(hide_category) else "Not set"
+        is_hidden = await self._is_managed_category_hidden(ctx.guild)
+        hide_status = "🔴 Hidden" if is_hidden else "🟢 Visible"
+        embed.add_field(
+            name="🔒 Hide Module",
+            value=f"**Visibility:** {hide_status}\n**Category:** `{hide_cat_name}`",
+            inline=True
+        )
+
+        embed.set_footer(text=f"e.Network | Checked by {ctx.author.display_name}")
+        await ctx.send(embed=embed)
+
+    @afterwork_group.command(name="help")
+    async def afterwork_help(self, ctx: commands.Context):
+        """List all available subcommands for Afterwork."""
+        await ctx.send_help(self.afterwork_group)
+
+    # --- DEPLOY SUBCOMMAND GROUP ---
+
+    @afterwork_group.group(name="deploy", invoke_without_command=True)
+    async def afterwork_deploy_group(self, ctx: commands.Context):
+        """Deploys one or all configuration hubs.
+        
+        Typing this without subcommands deploys all hubs sequentially.
+        """
         if ctx.invoked_subcommand is None:
             await self.deploy_all(ctx)
+
+    @afterwork_deploy_group.command(name="audio")
+    async def afterwork_audio_deploy_cmd(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for Audio."""
+        await self.afterwork_audio_deploy(ctx)
+
+    @afterwork_deploy_group.command(name="embed")
+    async def afterwork_embed_deploy_cmd(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for Embed."""
+        await self.afterwork_embed_deploy(ctx)
+
+    @afterwork_deploy_group.command(name="rss")
+    async def afterwork_rss_deploy_cmd(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for RSS."""
+        await self.afterwork_rss_deploy(ctx)
+
+    @afterwork_deploy_group.command(name="tv")
+    async def afterwork_tv_deploy_cmd(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for TV."""
+        await self.afterwork_tv_deploy(ctx)
+
+    @afterwork_deploy_group.command(name="voice")
+    async def afterwork_voice_deploy_cmd(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for Voice."""
+        await self.afterwork_voice_deploy(ctx)
+
+    @afterwork_deploy_group.command(name="hide")
+    async def afterwork_hide_deploy_cmd(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for Hide Category Visibility."""
+        await self.afterwork_hide_deploy(ctx)
+
+    # --- RSS SUBCOMMAND GROUP ---
+
+    @afterwork_group.group(name="rss")
+    async def afterwork_rss_group(self, ctx: commands.Context):
+        """RSS feed management commands."""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help()
+
+    @afterwork_rss_group.command(name="remove")
+    async def afterwork_rss_remove(self, ctx, feed_name: str):
+        """Removes an RSS feed by its configured name."""
+        feed_name = feed_name.lower()
+        async with self.config.guild(ctx.guild).rss_feeds() as feeds:
+            initial_len = len(feeds)
+            feeds[:] = [f for f in feeds if f['name'] != feed_name]
+            
+            if len(feeds) < initial_len:
+                await ctx.send(f"✅ Feed **{feed_name}** removed.")
+            else:
+                await ctx.send(f"❌ Feed **{feed_name}** not found.")
 
     # === Main Deploy All Command ===
     async def deploy_all(self, ctx: commands.Context):
@@ -1059,9 +1206,8 @@ class Afterwork(commands.Cog, name="Afterwork"):
         except (discord.NotFound, discord.Forbidden):
             pass
 
-    # --- SUBCOMMANDS ---
+    # --- DEPLOYMENT HELPER METHODS ---
 
-    @afterwork_group.command(name="audio")
     async def afterwork_audio_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Audio."""
         old_message_id = await self.config.guild(ctx.guild).audio_settings_message_id()
@@ -1116,7 +1262,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
                     break
         except Exception: pass
 
-    @afterwork_group.command(name="embed")
     async def afterwork_embed_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Embed."""
         old_message_id = await self.config.guild(ctx.guild).embed_setup_message_id()
@@ -1145,12 +1290,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
                     await message.delete()
                     break
         except Exception: pass
-
-    @afterwork_group.group(name="rss", invoke_without_command=True)
-    async def afterwork_rss_group(self, ctx: commands.Context):
-        """RSS feed control hub."""
-        if ctx.invoked_subcommand is None:
-            await self.afterwork_rss_deploy(ctx)
 
     async def afterwork_rss_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for RSS."""
@@ -1182,7 +1321,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
                     break
         except Exception: pass
 
-    @afterwork_group.command(name="tv")
     async def afterwork_tv_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for TV."""
         old_message_id = await self.config.guild(ctx.guild).tv_setup_message_id()
@@ -1213,7 +1351,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
                     break
         except Exception: pass
 
-    @afterwork_group.command(name="voice")
     async def afterwork_voice_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Voice."""
         old_message_id = await self.config.guild(ctx.guild).voice_setup_message_id()
@@ -1243,7 +1380,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
                     break
         except Exception: pass
 
-    @afterwork_group.command(name="hide")
     async def afterwork_hide_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Hide Category Visibility."""
         old_message_id = await self.config.guild(ctx.guild).hide_setup_message_id()
@@ -1277,19 +1413,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
                     await message.delete()
                     break
         except Exception: pass
-
-    @afterwork_rss_group.command(name="remove")
-    async def afterwork_rss_remove(self, ctx, feed_name: str):
-        """Removes an RSS feed by its configured name."""
-        feed_name = feed_name.lower()
-        async with self.config.guild(ctx.guild).rss_feeds() as feeds:
-            initial_len = len(feeds)
-            feeds[:] = [f for f in feeds if f['name'] != feed_name]
-            
-            if len(feeds) < initial_len:
-                await ctx.send(f"✅ Feed **{feed_name}** removed.")
-            else:
-                await ctx.send(f"❌ Feed **{feed_name}** not found.")
 
     # --- AUDIO CORE METHODS & LISTENERS ---
 

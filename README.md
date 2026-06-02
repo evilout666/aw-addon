@@ -27,13 +27,15 @@ Deploy the hubs in a channel using the following command structure:
 
 | Command | Action |
 | --- | --- |
-| `[p]afterwork` | Deploys/redeploys all 6 configuration hubs sequentially. |
-| `[p]afterwork audio` | Deploys the Audio player control settings hub. |
-| `[p]afterwork embed` | Deploys the custom JSON embed sender hub. |
-| `[p]afterwork rss` | Deploys the RSS feed configuration hub. |
-| `[p]afterwork tv` | Deploys the Sonarr and Radarr webhook reformatter hub. |
-| `[p]afterwork voice` | Deploys the temporary voice room management hub. |
-| `[p]afterwork hide` | Deploys the category visibility hide/show hub. |
+| `[p]afterwork` | Displays the system status dashboard embed for all modules. |
+| `[p]afterwork help` | Lists all available subcommands. |
+| `[p]afterwork deploy` | Deploys/redeploys all 6 configuration hubs sequentially. |
+| `[p]afterwork deploy audio` | Deploys the Audio player control settings hub. |
+| `[p]afterwork deploy embed` | Deploys the custom JSON embed sender hub. |
+| `[p]afterwork deploy rss` | Deploys the RSS feed configuration hub. |
+| `[p]afterwork deploy tv` | Deploys the Sonarr and Radarr webhook reformatter hub. |
+| `[p]afterwork deploy voice` | Deploys the temporary voice room management hub. |
+| `[p]afterwork deploy hide` | Deploys the category visibility hide/show hub. |
 | `[p]afterwork rss remove <name>` | Removes an RSS feed configuration by its unique name. |
 
 ## Installation and Usage
@@ -43,4 +45,4 @@ Deploy the hubs in a channel using the following command structure:
    ```
    [p]load afterwork
    ```
-3. **Setup:** Run `[p]afterwork` in your designated admin channel to deploy all persistent control hubs at once, or use the subcommands to deploy specific ones.
+3. **Setup:** Run `[p]afterwork deploy` in your designated admin channel to deploy all persistent control hubs at once, or use the subcommands to deploy specific ones.
