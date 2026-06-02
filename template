@@ -1,290 +1,150 @@
-import discord
-from redbot.core import commands, Config
-import logging
-import asyncio
-from datetime import datetime
+# Boilerplate & Guide for Extending the Unified Afterwork Cog
 
-# =========================================================================================
-# === DEVELOPMENT INSTRUCTIONS: START
-# =========================================================================================
-# 
-# To create a new cog based on this template, follow these steps:
-# 
-# 1.  Rename the file (e.g., from 'afterwork_template.py' to 'afterworknew.py').
-# 
-# 2.  Update the logger name (line 11). [Reference: #1]
-# 
-# 3.  Update the Cog Class name (e.g., AfterworkTemplate -> AfterworkNew) (line 210). [Reference: #3]
-# 
-# 4.  Update the unique Config identifier (line 215). [Reference: #4]
-# 
-# 5.  Add/Modify configuration defaults in `self.config.register_guild` (line 218). [Reference: #5]
-# 
-# 6.  Customize the embed description (line 49). [Reference: #2]
-# 
-# 7.  Customize `_update_setup_embed` to fetch and display your new settings (lines 40-62).
-# 
-# 8.  Update the Command name in the `@commands.command(name=...)` decorator (line 231). [Reference: #6]
-# 
-# 9.  Update the main embed title (line 247). [Reference: #7]
-# 
-# 10. Customize the `CustomSettingModal` class or duplicate it for multiple settings (lines 66-99).
-# 
-# 11. Customize the three placeholder buttons (`setting_button_1`, `2`, `3`) in `SetupView`
-#     to use your new modals/logic, or remove any buttons you don't need (lines 142-181).
-# 
-# 12. Update the `setup(bot)` function with the new Cog Class name (line 263). [Reference: #8]
-# 
-# =========================================================================================
-# === DEVELOPMENT INSTRUCTIONS: END
-# =========================================================================================
+This file serves as a reference guide and code template for adding a new module or functionality to the unified `afterwork` cog. 
 
-# 1. Update the logger name for the new cog
-log = logging.getLogger("red.AfterworkTemplate") 
+---
 
-# --- UTILITY FUNCTIONS ---
+## 1. Unified Cog Architecture Overview
 
-def _get_admin_footer(interaction: discord.Interaction, status_action: str) -> str:
-    """
-    Helper to generate the administrative footer format used across all cogs.
-    Includes e.Network branding and timestamped action.
-    """
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    return f"e.Network | {status_action} by {interaction.user.display_name} {current_time}"
+All Afterwork modules are unified into a single cog class (`Afterwork`) to simplify deployment and state management. The cog is located in the `afterwork` package:
+- `afterwork/__init__.py`: Handles loading and initializing the cog.
+- `afterwork/afterwork.py`: The single code file containing the cog class, views, modals, and helper functions.
+- `afterwork/info.json`: Cog package metadata.
 
-async def _send_owner_dm(bot, message: str):
-    """Sends a critical error message directly to the bot owner."""
-    owner_id = bot.owner_id
-    owner = bot.get_user(owner_id)
-    if owner:
-        try:
-            embed = discord.Embed(
-                title="⚠️ Afterwork Template Error Notification",
-                description=message,
-                color=discord.Color.red()
-            )
-            await owner.send(embed=embed)
-        except discord.Forbidden:
-            log.error(f"Failed to DM owner ({owner.name}). Owner must enable DMs.")
+### Coding Rules & Best Practices:
+1. **Namespace Prefixing:** Always prefix all config keys, views, modals, and helper functions to prevent namespace collisions. For example, if adding a feature called `Notifier`:
+   - Config keys: `notifier_enabled`, `notifier_setup_message_id`, etc.
+   - Views: `NotifierSetupView`, `NotifierControlView`.
+   - Modals: `NotifierSettingsModal`.
+   - Helper functions: `_update_notifier_setup_embed()`, `_process_notifier_message()`.
+2. **Owner-Only Security:** All administrative commands and interaction check callbacks must restrict access to the bot owner (`await self.cog.bot.is_owner(interaction.user)`).
+3. **View Persistence:** Any persistent view must have `timeout=None` and set explicit `custom_id` strings on all buttons/select inputs.
+4. **Clean UX:** Always defer interactions quickly (using ephemeral messages/defers where appropriate) and update the main configuration embed silently instead of posting public success logs.
 
-async def _update_setup_embed(cog: commands.Cog, guild: discord.Guild, embed: discord.Embed):
-    """
-    Refreshes the configuration data shown in the setup embed.
-    
-    ### [CUSTOMIZATION START]
-    Customize this function to fetch and display your specific cog settings.
-    ### [CUSTOMIZATION END]
-    """
+---
+
+## 2. Step-by-Step Integration Checklist
+
+Follow these steps to add a new module (e.g. `newfeature`) to `afterwork.py`:
+
+### [ ] Step 1: Register Configuration Keys
+Add the default configuration values inside the `__init__` method of the main `Afterwork` class:
+```python
+# inside self.config.register_guild:
+newfeature_enabled=False,
+newfeature_setup_message_id=None,
+newfeature_custom_setting="default_value",
+```
+
+### [ ] Step 2: Implement Setup Embed Updater
+Write an embed updater function in the **DYNAMIC SETUP EMBED UPDATERS** section:
+```python
+async def _update_newfeature_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
     settings = await cog.config.guild(guild).all()
-    # Replace 'setting_key' with your actual setting key (e.g., 'source_id')
-    custom_setting_value = settings.get('custom_setting', '*Not configured*') 
-    is_enabled = settings.get('enabled', False)
-
-    status_emoji = "🟢 Active" if is_enabled else "🔴 Inactive"
+    is_enabled = settings.get('newfeature_enabled', False)
+    custom_val = settings.get('newfeature_custom_setting', '*Not configured*')
     
-    # 2. Customize the general description
-    embed.description = (
-        "This panel configures the core functionality of the new cog, including setting essential\n"
-        "parameters and managing the overall system activity status."
-    )
+    status_display = "🟢 Active" if is_enabled else "🔴 Inactive"
+    
+    embed.description = "Configure parameters for the new feature."
     embed.clear_fields()
-    
-    # Standard Fields
-    embed.add_field(name="System Status", value=status_emoji, inline=False)
-    
-    # Custom Fields (Add/Remove as needed)
-    embed.add_field(name="Custom Setting Example", value=custom_setting_value, inline=False)
-    
+    embed.add_field(name="System Status", value=status_display, inline=False)
+    embed.add_field(name="Custom Parameter", value=custom_val, inline=False)
     return embed
+```
 
-# --- MODALS ---
+### [ ] Step 3: Create Modals & Views
+Create your interaction classes. Verify that all components have unique `custom_id`s:
+```python
+class NewFeatureSettingsModal(discord.ui.Modal, title="Update Feature Settings"):
+    setting_input = discord.ui.TextInput(label="Feature Parameter", placeholder="Type setting here...", required=True)
 
-class CustomSettingModal(discord.ui.Modal, title="Set Custom Cog Setting"):
-    """
-    ### [CUSTOMIZATION START]
-    Duplicate and customize this modal for each setting that requires user input.
-    ### [CUSTOMIZATION END]
-    """
-    setting_input = discord.ui.TextInput(
-        label="New Setting Value",
-        style=discord.TextStyle.short,
-        placeholder="Enter a value for the custom setting.",
-        required=True,
-    )
-    
-    def __init__(self, cog: commands.Cog, original_message: discord.Message):
+    def __init__(self, cog, original_message: discord.Message):
         super().__init__(timeout=300)
         self.cog = cog
         self.original_message = original_message
 
     async def on_submit(self, interaction: discord.Interaction):
-        new_value = self.setting_input.value.strip()
+        await interaction.response.defer(ephemeral=True)
+        value = self.setting_input.value.strip()
         
-        # --- Save configuration ---
-        # Replace 'custom_setting' with your actual config key
-        await self.cog.config.guild(interaction.guild).custom_setting.set(new_value)
+        await self.cog.config.guild(interaction.guild).newfeature_custom_setting.set(value)
         
-        # Update the original setup message to reflect the change
+        # Refresh setup embed
         embed = self.original_message.embeds[0]
-        embed.set_footer(text=_get_admin_footer(interaction, "Custom setting updated"))
+        embed.set_footer(text=_get_admin_footer(interaction, "Settings updated"))
+        await _update_newfeature_setup_embed(self.cog, interaction.guild, embed)
+        await self.original_message.edit(embed=embed)
 
-        await _update_setup_embed(self.cog, interaction.guild, embed)
-        
-        # Edit message to update the embed
-        view = SetupView(self.cog, initial_enabled=await self.cog.config.guild(interaction.guild).enabled())
-        await interaction.response.edit_message(embed=embed, view=view)
-        
-        # SUCCESS: Send ephemeral (private)
-        await interaction.followup.send(f"✅ Custom Setting updated to `{new_value}`.", ephemeral=True)
 
-# --- VIEW (The Persistent Setup Hub) ---
-
-class SetupView(discord.ui.View):
-    """
-    A standardized persistent view for Afterwork cog configuration.
-    """
-    def __init__(self, cog: commands.Cog, initial_enabled: bool = False):
+class NewFeatureSetupView(discord.ui.View):
+    def __init__(self, cog, initial_enabled: bool = False):
         super().__init__(timeout=None)
         self.cog = cog
-        
-        # Standardized Toggle Button Logic
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    def _check_owner(self, interaction: discord.Interaction):
-        """Standardized owner check function."""
-        # Using interaction.user.id == self.cog.bot.owner_id is safer/simpler for Redbot owner checks
-        if interaction.user.id != self.cog.bot.owner_id: 
-            # ERROR: Send publicly
-            # Use original response method to ensure error message is seen
-            asyncio.create_task(interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=False))
-            return False
-        return True
+    @discord.ui.button(label="Set Config", style=discord.ButtonStyle.primary, custom_id="newfeature_set_config_btn", row=0)
+    async def set_config_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self.cog.bot.is_owner(interaction.user):
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
+        await interaction.response.send_modal(NewFeatureSettingsModal(self.cog, interaction.message))
 
-    @discord.ui.button(label="Setting 1 (Primary)", style=discord.ButtonStyle.primary, custom_id="template_set_1_button", row=0)
-    async def setting_button_1(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """
-        ### [CUSTOMIZATION START]
-        Customize the label, custom_id, and callback for your first setting.
-        ### [CUSTOMIZATION END]
-        """
-        if not self._check_owner(interaction): return
-        # Example action: Send the modal defined above
-        modal = CustomSettingModal(self.cog, interaction.message)
-        await interaction.response.send_modal(modal)
-
-    @discord.ui.button(label="Setting 2 (Primary)", style=discord.ButtonStyle.primary, custom_id="template_set_2_button", row=0)
-    async def setting_button_2(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """
-        ### [CUSTOMIZATION START]
-        Customize the label, custom_id, and callback for your second setting.
-        ### [CUSTOMIZATION END]
-        """
-        if not self._check_owner(interaction): return
-        # Example action: A simple ephemeral response
-        await interaction.response.send_message("This button is a placeholder for Setting 2.", ephemeral=True)
-
-    @discord.ui.button(label="Setting 3 (Secondary)", style=discord.ButtonStyle.secondary, custom_id="template_set_3_button", row=1)
-    async def setting_button_3(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """
-        ### [CUSTOMIZATION START]
-        Customize the label, custom_id, and callback for your third setting.
-        ### [CUSTOMIZATION END]
-        """
-        if not self._check_owner(interaction): return
-        # Example action: A simple ephemeral response
-        await interaction.response.send_message("This button is a placeholder for Setting 3.", ephemeral=True)
-
-
-    @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.secondary, custom_id="template_toggle_button", row=1)
+    @discord.ui.button(label="Toggle", style=discord.ButtonStyle.secondary, custom_id="newfeature_toggle_btn", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self._check_owner(interaction): return
+        if not await self.cog.bot.is_owner(interaction.user):
+            return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         
-        await interaction.response.defer(ephemeral=True, thinking=True) # Defer ephemeral to update quickly
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        new_state = not (await self.cog.config.guild(interaction.guild).newfeature_enabled())
+        await self.cog.config.guild(interaction.guild).newfeature_enabled.set(new_state)
         
-        new_state = not (await self.cog.config.guild(interaction.guild).enabled())
-        await self.cog.config.guild(interaction.guild).enabled.set(new_state)
-        
-        # Standardized button update
         button.label = "Disable" if new_state else "Enable"
         button.style = discord.ButtonStyle.danger if new_state else discord.ButtonStyle.success
         
         embed = interaction.message.embeds[0]
-        
-        # Set new administrative footer
         status_msg = f"System {'enabled' if new_state else 'disabled'}"
         embed.set_footer(text=_get_admin_footer(interaction, status_msg))
         
-        await _update_setup_embed(self.cog, interaction.guild, embed)
+        await _update_newfeature_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed, view=self)
-        
-        # SUCCESS: Send ephemeral (private)
-        await interaction.followup.send(f"System has been **{'enabled' if new_state else 'disabled'}**.", ephemeral=True)
+        await interaction.followup.send(f"New feature has been **{'enabled' if new_state else 'disabled'}**.", ephemeral=True)
+```
 
-# --- MAIN COG CLASS ---
+### [ ] Step 4: Hook Up View Initialization (Bot Startup)
+Ensure that the View is registered dynamically on bot startup/restart in the `initialize` method of the main `Afterwork` class:
+```python
+# inside Afterwork.initialize():
+if data.get('newfeature_setup_message_id'):
+    self.bot.add_view(NewFeatureSetupView(self, initial_enabled=data.get('newfeature_enabled', False)), message_id=data['newfeature_setup_message_id'])
+```
 
-class AfterworkTemplate(commands.Cog, name="AfterworkTemplate"): # 3. Update the Cog name
-    """
-    Template for creating new Afterwork cogs with a standardized administrative panel.
-    """
-    
-    def __init__(self, bot):
-        self.bot = bot
-        # 4. Use a unique identifier
-        self.config = Config.get_conf(self, identifier=1122334455, force_registration=True) 
-        self.config.register_guild(
-            enabled=False,
-            setup_message_id=None,
-            # 5. Add custom default settings here
-            custom_setting="default_value", 
-        )
-
-    async def initialize(self):
-        """Loads persistent views on bot restart."""
-        guilds_data = await self.config.all_guilds()
-        for guild_id, data in guilds_data.items():
-            if data.get('setup_message_id'):
-                initial_enabled = data.get('enabled', False)
-                # Ensure view is loaded with correct initial state for button colors
-                self.bot.add_view(SetupView(self, initial_enabled=initial_enabled), message_id=data['setup_message_id'])
-
-    @commands.command(name="afterworktemplate") # 6. Update the Command name
-    @commands.is_owner()
-    async def afterwork_template_command(self, ctx: commands.Context):
-        """
-        Deploys or redeploys the persistent administrative configuration hub.
-        """
-        bot_member = ctx.guild.get_member(self.bot.user.id)
-        perms = ctx.channel.permissions_for(bot_member)
-        if not perms.send_messages or not perms.manage_messages:
-            return await _send_owner_dm(self.bot, f"Config failed in **{ctx.guild.name}**. Need Send/Manage Messages in **#{ctx.channel.name}**.")
-
-        # Clean up old message
-        old_message_id = await self.config.guild(ctx.guild).setup_message_id()
+### [ ] Step 5: Implement Deploy Subcommands
+Under the **SUBCOMMANDS** section in `Afterwork`, register the deploy command under the main `afterwork` command group:
+```python
+    @afterwork_group.command(name="newfeature")
+    async def afterwork_newfeature_deploy(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for the New Feature."""
+        old_message_id = await self.config.guild(ctx.guild).newfeature_setup_message_id()
         if old_message_id:
             try:
                 old_message = await ctx.channel.fetch_message(old_message_id)
                 await old_message.delete()
             except discord.HTTPException: pass
 
-        # Create and update embed with current settings
-        initial_embed = discord.Embed(title="New Cog Title", color=discord.Color.blue()) # 7. Set Cog Title
-        initial_embed = await _update_setup_embed(self, ctx.guild, initial_embed)
-        initial_enabled = await self.config.guild(ctx.guild).enabled()
-        
-        # Set initial footer
+        initial_embed = discord.Embed(title="New Feature Configuration", color=discord.Color.blue())
+        initial_embed = await _update_newfeature_setup_embed(self, ctx.guild, initial_embed)
         initial_embed.set_footer(text=_get_admin_footer(ctx, "Configuration Hub Deployed"))
+        initial_enabled = await self.config.guild(ctx.guild).newfeature_enabled()
 
-        # Send new message with persistent view
-        view = SetupView(self, initial_enabled=initial_enabled)
+        view = NewFeatureSetupView(self, initial_enabled=initial_enabled)
         sent_message = await ctx.send(embed=initial_embed, view=view)
-        
-        # Pin the message and save its ID
-        await sent_message.pin(reason="Afterwork Configuration Hub.")
-        await self.config.guild(ctx.guild).setup_message_id.set(sent_message.id)
-        
-        # Clean up command invocation and pin notification
-        await ctx.message.delete()
+
+        await sent_message.pin(reason="Afterwork New Feature Configuration Hub.")
+        await self.config.guild(ctx.guild).newfeature_setup_message_id.set(sent_message.id)
+
+        try: await ctx.message.delete()
+        except discord.HTTPException: pass
         await asyncio.sleep(1)
         try:
             async for message in ctx.channel.history(limit=5):
@@ -292,8 +152,43 @@ class AfterworkTemplate(commands.Cog, name="AfterworkTemplate"): # 3. Update the
                     await message.delete()
                     break
         except Exception: pass
+```
 
-async def setup(bot):
-    cog = AfterworkTemplate(bot) # 8. Update this line
-    await cog.initialize()
-    await bot.add_cog(cog)
+### [ ] Step 6: Add to Deploy All Chain
+Add the subcommand helper method to `deploy_all` to support sequential deployment when `[p]afterwork` is executed:
+```python
+# inside Afterwork.deploy_all():
+subcommands = [
+    ...,
+    self.afterwork_newfeature_deploy
+]
+```
+
+### [ ] Step 7: Integrate Listeners (If applicable)
+Never write separate duplicate listeners like `on_message` or `on_voice_state_update` as they will override each other. Instead, write custom processing methods and call them inside the unified event listeners:
+
+```python
+# 1. Write the processing helper:
+async def _process_newfeature_message(self, message: discord.Message):
+    # Skip checks if module disabled
+    if not await self.config.guild(message.guild).newfeature_enabled():
+        return
+    # Add your message handling logic here...
+    pass
+
+# 2. Hook it inside the unified listener at the bottom of afterwork.py:
+@commands.Cog.listener()
+async def on_message(self, message: discord.Message):
+    if not message.guild: return
+    await self._process_tv_message(message)
+    await self._process_audio_message(message)
+    await self._process_newfeature_message(message) # Hooked!
+```
+
+---
+
+## 3. Standard Utility Reference
+
+Keep these shared utilities in mind when building new features:
+* **Admin Footer Formatting:** Use `_get_admin_footer(interaction_or_ctx, status_message)` to automatically generate standardized timestamps and author stamps for panel embeds.
+* **Owner Notification DMs:** Use `await _send_owner_dm(self.bot, message)` to report failures, access infractions, or exceptions directly to the bot owner's DMs.
