@@ -1,3 +1,3 @@
-# AGY
+# AI Assistant Rules
 
-This file was added as requested.
+Custom Discord RedBot cog for server: AFTERWORK Play 
