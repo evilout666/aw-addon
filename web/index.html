@@ -163,10 +163,12 @@ See you out in the deep desert. *The spice must flow!* 🏜️</textarea>
                             <!-- Go Backend Connection Settings (Only visible in Live mode) -->
                             <div class="form-group" id="live-settings-group" style="display: none; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 15px;">
                                 <label for="backend-api-url">Go Backend Base URL</label>
-                                <div style="display: flex; gap: 10px;">
+                                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
                                     <input type="url" id="backend-api-url" placeholder="e.g. http://localhost:9876" value="http://localhost:9876" style="flex-grow: 1; padding: 10px; background-color: var(--bg-base); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: var(--radius-sm); font-size: 14px;">
                                     <button type="button" id="btn-save-backend-url" class="btn-sm"><i class="fa-solid fa-floppy-disk"></i> Save</button>
                                 </div>
+                                <label for="backend-api-token" style="margin-top: 5px; display: block;">Dashboard Authorization Token (Optional)</label>
+                                <input type="password" id="backend-api-token" placeholder="Enter Go backend API key if configured" style="width: 100%; padding: 10px; background-color: var(--bg-base); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: var(--radius-sm); font-size: 14px; box-sizing: border-box; margin-bottom: 10px;">
                                 <p style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">This URL proxies requests to the Redbot Python cog API.</p>
                             </div>
                         </div>
@@ -376,10 +378,12 @@ See you out in the deep desert. *The spice must flow!* 🏜️</textarea>
                         <div class="panel-body">
                             <div class="form-group">
                                 <label for="amp-api-url">Status Bridge API Endpoint</label>
-                                <div class="input-with-button">
+                                <div class="input-with-button" style="margin-bottom: 10px;">
                                     <input type="url" id="amp-api-url" placeholder="e.g. http://your-server-ip:9876/api/status" value="http://localhost:9876/api/status">
                                     <button type="button" id="btn-save-api-url" class="btn-sm"><i class="fa-solid fa-floppy-disk"></i> Save</button>
                                 </div>
+                                <label for="amp-api-token" style="margin-top: 5px; display: block;">Dashboard Authorization Token (Optional)</label>
+                                <input type="password" id="amp-api-token" placeholder="Enter Go backend API key if configured" style="width: 100%; padding: 10px; background-color: var(--bg-base); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: var(--radius-sm); font-size: 14px; box-sizing: border-box; margin-bottom: 10px;">
                                 <p class="form-help">Enter the public URL of the Go service running on your server. If running on the same machine, use <code>http://localhost:9876/api/status</code>.</p>
                             </div>
                         </div>

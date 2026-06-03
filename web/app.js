@@ -30,6 +30,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSaveBackendUrl = document.getElementById('btn-save-backend-url');
     const btnRefreshChannels = document.getElementById('btn-refresh-channels');
     const embedChannelSelect = document.getElementById('embed-channel-select');
+    const backendApiToken = document.getElementById('backend-api-token');
+    const ampApiToken = document.getElementById('amp-api-token');
 
     // Toast Elements
     const toast = document.getElementById('toast');
@@ -150,6 +152,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (backendApiUrlInput) {
         backendApiUrlInput.value = savedGoBackendUrl;
     }
+    const savedToken = localStorage.getItem('dashboard_token') || '';
+    if (backendApiToken) {
+        backendApiToken.value = savedToken;
+    }
+    if (ampApiToken) {
+        ampApiToken.value = savedToken;
+    }
 
     // Initialize toggle state from localStorage (default: false)
     const isLiveEnabled = localStorage.getItem('enable-live-control') === 'true';
@@ -203,6 +212,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (ampApiUrlInput) {
                 ampApiUrlInput.value = `${url}/api/status`;
             }
+            const token = (backendApiToken && backendApiToken.value.trim()) || '';
+            localStorage.setItem('dashboard_token', token);
+            if (ampApiToken) {
+                ampApiToken.value = token;
+            }
             showToast('Connection settings saved!');
             fetchBotChannels();
         });
@@ -227,7 +241,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const baseUrl = localStorage.getItem('go_backend_url') || 'http://localhost:9876';
         
         try {
-            const response = await fetch(`${baseUrl}/api/bot/channels`);
+            const headers = {};
+            const token = localStorage.getItem('dashboard_token');
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            const response = await fetch(`${baseUrl}/api/bot/channels`, { headers });
             if (!response.ok) {
                 throw new Error(`HTTP error ${response.status}`);
             }
@@ -280,11 +299,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const baseUrl = localStorage.getItem('go_backend_url') || 'http://localhost:9876';
 
             try {
+                const headers = { 'Content-Type': 'application/json' };
+                const token = localStorage.getItem('dashboard_token');
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
                 const response = await fetch(`${baseUrl}/api/bot/embed`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: headers,
                     body: JSON.stringify({
                         channel_id: channelId,
                         embed: payload
@@ -685,6 +707,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             ampApiUrlInput.value = url;
             localStorage.setItem('amp_api_url', url);
+            const token = (ampApiToken && ampApiToken.value.trim()) || '';
+            localStorage.setItem('dashboard_token', token);
+            if (backendApiToken) {
+                backendApiToken.value = token;
+            }
             showToast('API Endpoint saved successfully!');
             fetchAmpStatus();
         });
@@ -710,7 +737,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), 8000); // 8 second timeout
 
-            const response = await fetch(url, { signal: controller.signal });
+            const headers = {};
+            const token = localStorage.getItem('dashboard_token');
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(url, { 
+                signal: controller.signal,
+                headers: headers
+            });
             clearTimeout(id);
 
             if (!response.ok) {
