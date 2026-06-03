@@ -16,6 +16,7 @@ This file tracks the features and tasks for the Afterwork Play RedBot cog.
 *   [x] Dynamic temporary voice room controller panel (`deploy voice`)
 *   [x] Category channel visibility administration (`deploy hide`)
 *   [x] High-performance Go background service (`amp-status`) for querying CubeCoders AMP instances and exposing status securely with caching and CORS headers
+*   [x] Integrated AMP server status monitoring tab into interactive dashboard webpage
 
 ## 🟡 To-Do / Future Ideas
 *   [ ] 
