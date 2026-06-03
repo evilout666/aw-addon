@@ -1,4 +1,4 @@
-# Afterwork AWCogs — AI Assistant Rules
+# Afterwork aw-addon — AI Assistant Rules
 
 This repository contains the official Discord Bot cog for the Afterwork Play server management. 
 
@@ -18,7 +18,7 @@ The project is split into three dedicated branches. Ensure you are committing co
 
 ## 🐍 Python / Cog Coding Guidelines (`main` branch)
 
-The main cog is located in **[afterwork/](file:///root/projects/redbot-cogs/AWCogs/afterwork)** and is written as a unified cog class `Afterwork` under `redbot.core.commands`.
+The main cog is located in **[afterwork/](file:///root/projects/redbot-cogs/aw-addon/afterwork)** and is written as a unified cog class `Afterwork` under `redbot.core.commands`.
 
 ### 🛡️ Owner-Only Security
 * All configuration commands, panels, and interactive elements are **strictly owner-only** for safety.

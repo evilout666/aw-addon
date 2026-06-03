@@ -51,7 +51,7 @@ Deploy the hubs in a designated administration channel using the following comma
 ## 🚀 Installation & Setup
 
 ### 1. Placement
-Copy the **[afterwork/](file:///root/projects/redbot-cogs/AWCogs/afterwork)** folder into a valid cog directory on your Red-DiscordBot instance (use `[p]paths` to list valid paths).
+Copy the **[afterwork/](file:///root/projects/redbot-cogs/aw-addon/afterwork)** folder into a valid cog directory on your Red-DiscordBot instance (use `[p]paths` to list valid paths).
 
 ### 2. Loading
 Load the cog on your Discord instance:
@@ -65,14 +65,21 @@ Create a private channel for administrator controls and run:
 [p]afterwork deploy
 ```
 
+### 4. Go Backend Status Bridge (Optional)
+To safely monitor and fetch the live statuses of your CubeCoders AMP game server instances, run this one-line command to download the installer from the `backend` branch and configure the system service:
+```bash
+curl -fsSL https://raw.githubusercontent.com/evilout666/aw-addon/backend/install.sh | sudo bash
+```
+*This installer automatically pulls the repository code, builds the binary, secures local credentials, and creates a systemd service.*
+
 ---
 
 ## 📂 Project Organization
 
 This repository uses a multi-branch layout to isolate the Discord Bot Cog, the Go Status Service, and the static web Dashboard:
 
-* **[afterwork/](file:///root/projects/redbot-cogs/AWCogs/afterwork)** (Python): The Discord bot cog files (located on this **`main`** branch).
-* **[AGY.md](file:///root/projects/redbot-cogs/AWCogs/AGY.md)**: AI assistant coding standards and branch directory definitions.
-* **[STATUS.md](file:///root/projects/redbot-cogs/AWCogs/STATUS.md)**: Feature logs and future ideas status board.
+* **[afterwork/](file:///root/projects/redbot-cogs/aw-addon/afterwork)** (Python): The Discord bot cog files (located on this **`main`** branch).
+* **[AGY.md](file:///root/projects/redbot-cogs/aw-addon/AGY.md)**: AI assistant coding standards and branch directory definitions.
+* **[STATUS.md](file:///root/projects/redbot-cogs/aw-addon/STATUS.md)**: Feature logs and future ideas status board.
 * **`backend` Branch** (Go): Contains the Go server status bridge.
 * **`dashboard` Branch** (Static HTML/JS): Contains the web control dashboard.
