@@ -11,11 +11,9 @@ https://docs.discord.red/en/stable/guide_cog_creation.html
 command: [p]afterwork
 action: should open/give link for https://dash.afterworkplay.com
 
-command: 
-action:
+command:  [p]afterwork help
+action: list all subcommands
 
-command: 
-action:
 
 
 
