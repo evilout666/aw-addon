@@ -807,6 +807,60 @@ document.addEventListener('DOMContentLoaded', () => {
                 iconClass = 'fa-solid fa-circle-nodes';
             }
 
+            // Map AMPInstanceState enum values:
+            // Stopped = 0, Starting = 1, Running = 2, Stopping = 3, Restarting = 4, Updating = 5, Error = 6, Suspended = 7
+            let statusText = 'OFFLINE';
+            let statusClass = 'offline';
+            let statusIcon = 'fa-circle-xmark';
+
+            const status = server.status;
+            if (status === 2) {
+                statusText = 'ONLINE';
+                statusClass = 'online';
+                statusIcon = 'fa-circle-check';
+            } else if (status === 1) {
+                statusText = 'STARTING';
+                statusClass = 'starting';
+                statusIcon = 'fa-circle-play';
+            } else if (status === 3) {
+                statusText = 'STOPPING';
+                statusClass = 'stopping';
+                statusIcon = 'fa-circle-stop';
+            } else if (status === 4) {
+                statusText = 'RESTARTING';
+                statusClass = 'restarting';
+                statusIcon = 'fa-arrows-rotate';
+            } else if (status === 5) {
+                statusText = 'UPDATING';
+                statusClass = 'updating';
+                statusIcon = 'fa-cloud-arrow-down';
+            } else if (status === 6) {
+                statusText = 'ERROR';
+                statusClass = 'error';
+                statusIcon = 'fa-triangle-exclamation';
+            } else if (status === 7) {
+                statusText = 'SUSPENDED';
+                statusClass = 'suspended';
+                statusIcon = 'fa-pause';
+            } else {
+                if (server.running) {
+                    statusText = 'ONLINE';
+                    statusClass = 'online';
+                    statusIcon = 'fa-circle-check';
+                } else {
+                    statusText = 'OFFLINE';
+                    statusClass = 'offline';
+                    statusIcon = 'fa-circle-xmark';
+                }
+            }
+
+            const playerInfoHtml = (server.max_users > 0)
+                ? `<div class="server-card-players" title="Active Players">
+                     <i class="fa-solid fa-users"></i>
+                     <span>${server.active_users} / ${server.max_users}</span>
+                   </div>`
+                : '';
+
             return `
                 <div class="server-card">
                     <div class="server-card-header">
@@ -818,9 +872,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span>${moduleName}</span>
                         </div>
                     </div>
-                    <div class="server-card-status ${isOnline ? 'online' : 'offline'}">
-                        <i class="fa-solid ${isOnline ? 'fa-circle-check' : 'fa-circle-xmark'}"></i>
-                        <span>${isOnline ? 'ONLINE' : 'OFFLINE'}</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
+                        <div class="server-card-status ${statusClass}">
+                            <i class="fa-solid ${statusIcon}"></i>
+                            <span>${statusText}</span>
+                        </div>
+                        ${playerInfoHtml}
                     </div>
                 </div>
             `;

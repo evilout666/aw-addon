@@ -1388,6 +1388,49 @@ pre code {
     color: var(--accent-red);
 }
 
+.server-card-status.starting {
+    background-color: rgba(244, 162, 97, 0.1);
+    color: #f4a261;
+}
+
+.server-card-status.stopping {
+    background-color: rgba(230, 57, 70, 0.1);
+    color: #e63946;
+}
+
+.server-card-status.restarting {
+    background-color: rgba(69, 123, 157, 0.1);
+    color: #a8dadc;
+}
+
+.server-card-status.updating {
+    background-color: rgba(30, 144, 255, 0.1);
+    color: #1e90ff;
+}
+
+.server-card-status.error {
+    background-color: rgba(214, 40, 40, 0.1);
+    color: var(--accent-red);
+}
+
+.server-card-status.suspended {
+    background-color: rgba(108, 117, 125, 0.1);
+    color: #6c757d;
+}
+
+.server-card-players {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.server-card-players i {
+    color: var(--accent-blue);
+}
+
 /* Spinner Animation */
 .spinner {
     width: 40px;
