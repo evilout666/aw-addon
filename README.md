@@ -2,6 +2,8 @@
 
 A unified, standalone administration and automation cog for Red-DiscordBot, specifically tailored for private game server community management.
 
+🔗 **Web Control Dashboard:** [dash.afterworkplay.com](https://dash.afterworkplay.com/)
+
 ---
 
 ## 🎨 Design Philosophy
@@ -79,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/evilout666/aw-addon/backend/install
 This repository uses a two-branch layout to isolate the Discord Bot Cog & Web Dashboard from the Go Status Service:
 
 * **[afterwork/](file:///root/projects/redbot-cogs/aw-addon/afterwork)** (Python): The Discord bot cog files (located on this **`main`** branch).
-* **[web/](file:///root/projects/redbot-cogs/aw-addon/web)** (Static HTML/JS/CSS): The static web control dashboard files (located on this **`main`** branch).
+* **[web/](file:///root/projects/redbot-cogs/aw-addon/web)** (Static HTML/JS/CSS): The static web control dashboard files (located on this **`main`** branch). Can be hosted manually or accessed directly at [dash.afterworkplay.com](https://dash.afterworkplay.com/).
 * **[AGY.md](file:///root/projects/redbot-cogs/aw-addon/AGY.md)**: AI assistant coding standards and branch directory definitions.
 * **[STATUS.md](file:///root/projects/redbot-cogs/aw-addon/STATUS.md)**: Feature logs and future ideas status board.
 * **`backend` Branch** (Go): Contains the Go server status bridge.
