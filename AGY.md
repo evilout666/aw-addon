@@ -4,15 +4,14 @@ This repository contains the official Discord Bot cog for the Afterwork Play ser
 
 ---
 
-## 🚀 Branch Strategy (3-Branch Reorganization)
+## 🚀 Branch Strategy (2-Branch Reorganization)
 
-The project is split into three dedicated branches. Ensure you are committing code to the correct branch based on your modifications:
+The project is split into two dedicated branches. Ensure you are committing code to the correct branch based on your modifications:
 
 | Branch | Description | Tech Stack | Root Files |
 | --- | --- | --- | --- |
-| **`main`** | Discord bot cog only | Python (Red-DiscordBot, discord.py) | `afterwork/`, `README.md`, `STATUS.md`, `AGY.md` |
+| **`main`** | Discord bot cog & Static Web UI | Python (Red-DiscordBot, discord.py) & Vanilla Web | `afterwork/`, `index.html`, `app.js`, `style.css`, `README.md`, `STATUS.md`, `AGY.md` |
 | **`backend`** | Go status bridge service | Go (CubeCoders AMP status client) | `main.go`, `install.sh`, `README.md` |
-| **`dashboard`** | Static Web Admin UI | Vanilla HTML, CSS, JavaScript | `index.html`, `app.js`, `style.css` |
 
 ---
 
@@ -56,7 +55,8 @@ To prevent namespace collisions within the single unified cog class:
 
 ---
 
-## 💻 Web Dashboard Guidelines (`dashboard` branch)
+## 💻 Web Dashboard Guidelines (`main` branch)
 * **Tech Stack:** Vanilla HTML/JS/CSS.
 * **Aesthetics:** High-end premium dark mode theme, using modern fonts, responsive grids, and clean visual indicators.
-* **Deployment:** Pushes to the `dashboard` branch trigger a GitHub Action that deploys directly to Cloudflare Pages.
+* **Deployment:** Hosted manually.
+
