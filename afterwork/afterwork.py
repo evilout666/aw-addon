@@ -974,6 +974,12 @@ class Afterwork(commands.Cog, name="Afterwork"):
             hide_managed_category_id=None,
         )
 
+        self.config.register_global(
+            web_server_host="0.0.0.0",
+            web_server_port=9000,
+            web_server_token="afterwork-secret-token"
+        )
+
         self.settings_view = AudioSettingsView(self)
         self.player_view = AudioPlayerView(self)
         self.update_tasks = {}
@@ -981,6 +987,10 @@ class Afterwork(commands.Cog, name="Afterwork"):
         self._read_feeds_loop = None
         self._headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0"}
         self._post_queue = asyncio.Queue()
+
+        self.web_app = None
+        self.web_runner = None
+        self.web_site = None
 
     async def initialize(self):
         self.bot.add_view(self.settings_view)
@@ -1007,6 +1017,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 self.bot.add_view(HideSetupView(self, initial_hidden=initial_hidden), message_id=data['hide_setup_message_id'])
 
         self.start_background_loop()
+        await self.start_web_server()
 
     def start_background_loop(self):
         if not self._read_feeds_loop:
@@ -1017,6 +1028,105 @@ class Afterwork(commands.Cog, name="Afterwork"):
             task.cancel()
         if self._read_feeds_loop:
             self._read_feeds_loop.cancel()
+        if self.web_app:
+            self.bot.loop.create_task(self.stop_web_server())
+
+    # --- HTTP REST API SERVER ---
+
+    async def start_web_server(self):
+        from aiohttp import web
+        host = await self.config.web_server_host()
+        port = await self.config.web_server_port()
+
+        self.web_app = web.Application()
+        self.web_app.router.add_get("/api/v1/channels", self.handle_get_channels)
+        self.web_app.router.add_post("/api/v1/embed", self.handle_post_embed)
+
+        self.web_runner = web.AppRunner(self.web_app)
+        await self.web_runner.setup()
+
+        self.web_site = web.TCPSite(self.web_runner, host, port)
+        try:
+            await self.web_site.start()
+            log.info(f"Afterwork HTTP server started on {host}:{port}")
+        except Exception as e:
+            log.error(f"Failed to start Afterwork HTTP server: {e}")
+
+    async def stop_web_server(self):
+        if self.web_site:
+            await self.web_site.stop()
+            self.web_site = None
+        if self.web_runner:
+            await self.web_runner.cleanup()
+            self.web_runner = None
+        self.web_app = None
+        log.info("Afterwork HTTP server stopped.")
+
+    async def handle_get_channels(self, request):
+        from aiohttp import web
+        token = request.headers.get("Authorization")
+        expected_token = f"Bearer {await self.config.web_server_token()}"
+        if token != expected_token:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+
+        guild_id_str = request.query.get("guild_id")
+        guild = None
+        if guild_id_str:
+            try:
+                guild = self.bot.get_guild(int(guild_id_str))
+            except ValueError:
+                pass
+        if not guild and self.bot.guilds:
+            guild = self.bot.guilds[0]
+
+        if not guild:
+            return web.json_response({"error": "No guilds found"}, status=404)
+
+        channels = []
+        for chan in guild.text_channels:
+            channels.append({
+                "id": str(chan.id),
+                "name": chan.name
+            })
+        return web.json_response({"channels": channels})
+
+    async def handle_post_embed(self, request):
+        from aiohttp import web
+        token = request.headers.get("Authorization")
+        expected_token = f"Bearer {await self.config.web_server_token()}"
+        if token != expected_token:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON payload"}, status=400)
+
+        channel_id_str = data.get("channel_id")
+        embed_data = data.get("embed")
+
+        if not channel_id_str or not embed_data:
+            return web.json_response({"error": "Missing channel_id or embed data"}, status=400)
+
+        try:
+            channel_id = int(channel_id_str)
+        except ValueError:
+            return web.json_response({"error": "Invalid channel_id format"}, status=400)
+
+        channel = self.bot.get_channel(channel_id)
+        if not channel:
+            return web.json_response({"error": "Channel not found"}, status=404)
+
+        try:
+            embed = discord.Embed.from_dict(embed_data)
+        except Exception as e:
+            return web.json_response({"error": f"Invalid embed structure: {str(e)}"}, status=400)
+
+        try:
+            message = await channel.send(embed=embed)
+            return web.json_response({"status": "success", "message_id": str(message.id)})
+        except Exception as e:
+            return web.json_response({"error": f"Failed to send message: {str(e)}"}, status=500)
 
     # --- MAIN COMMAND GROUP ---
 
