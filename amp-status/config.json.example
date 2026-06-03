@@ -1,7 +1,0 @@
-{
-  "amp_url": "http://localhost:8080",
-  "amp_username": "admin",
-  "amp_password": "yourpasswordhere",
-  "bind_address": "0.0.0.0:9876",
-  "cache_duration_seconds": 10
-}
