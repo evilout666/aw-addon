@@ -136,9 +136,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('Please enter a valid URL', true);
                 return;
             }
+            // Strip any trailing API endpoints to get the base URL
+            url = url.replace(/\/api\/status\/?$/, '');
+            url = url.replace(/\/api\/bot\/channels\/?$/, '');
+            url = url.replace(/\/api\/bot\/embed\/?$/, '');
             if (url.endsWith('/')) {
                 url = url.slice(0, -1);
             }
+            backendApiUrlInput.value = url;
             localStorage.setItem('go_backend_url', url);
             localStorage.setItem('amp_api_url', `${url}/api/status`);
             if (ampApiUrlInput) {
@@ -622,11 +627,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnSaveApiUrl) {
         btnSaveApiUrl.addEventListener('click', () => {
-            const url = ampApiUrlInput.value.trim();
+            let url = ampApiUrlInput.value.trim();
             if (!url) {
                 showToast('Please enter a valid URL', true);
                 return;
             }
+            if (url.endsWith('/')) {
+                url = url.slice(0, -1);
+            }
+            // Auto-append /api/status if the user only entered the base URL
+            if (!url.endsWith('/api/status')) {
+                // If it ends with one of the bot paths, replace it
+                url = url.replace(/\/api\/bot\/channels\/?$/, '');
+                url = url.replace(/\/api\/bot\/embed\/?$/, '');
+                url = `${url}/api/status`;
+            }
+            ampApiUrlInput.value = url;
             localStorage.setItem('amp_api_url', url);
             showToast('API Endpoint saved successfully!');
             fetchAmpStatus();
