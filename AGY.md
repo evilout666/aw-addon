@@ -15,6 +15,7 @@ This file tracks the features and tasks for the Afterwork Play RedBot cog.
 *   [x] Sonarr/Radarr media webhook reformatter feed (`deploy tv`)
 *   [x] Dynamic temporary voice room controller panel (`deploy voice`)
 *   [x] Category channel visibility administration (`deploy hide`)
+*   [x] High-performance Go background service (`amp-status`) for querying CubeCoders AMP instances and exposing status securely with caching and CORS headers
 
 ## 🟡 To-Do / Future Ideas
 *   [ ] 
