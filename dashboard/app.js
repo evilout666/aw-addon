@@ -20,6 +20,10 @@ document.addEventListener('DOMContentLoaded', () => {
             title: 'Quick Deployer',
             subtitle: 'Copy commands to deploy and set up configuration panels on your server.'
         },
+        'amp-status': {
+            title: 'AMP Server Status',
+            subtitle: 'Live status check and monitoring dashboard for all managed game servers.'
+        },
         'documentation': {
             title: 'Documentation',
             subtitle: 'Complete command reference and function manuals for the Afterwork cog.'
@@ -46,6 +50,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (tabMeta[targetTab]) {
                 tabTitle.textContent = tabMeta[targetTab].title;
                 tabSubtitle.textContent = tabMeta[targetTab].subtitle;
+            }
+
+            // Automatically query status bridge when opening the AMP tab
+            if (targetTab === 'amp-status') {
+                fetchAmpStatus();
             }
         });
     });
@@ -400,6 +409,133 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // --- AMP Status Logic ---
+    const ampApiUrlInput = document.getElementById('amp-api-url');
+    const btnSaveApiUrl = document.getElementById('btn-save-api-url');
+    const btnRefreshStatus = document.getElementById('btn-refresh-status');
+    const ampLoader = document.getElementById('amp-loader');
+    const ampError = document.getElementById('amp-error');
+    const ampErrorText = document.getElementById('amp-error-text');
+    const serversGrid = document.getElementById('servers-grid');
+
+    // Load saved API URL from localStorage
+    const savedApiUrl = localStorage.getItem('amp_api_url');
+    if (savedApiUrl) {
+        if (ampApiUrlInput) ampApiUrlInput.value = savedApiUrl;
+    }
+
+    if (btnSaveApiUrl) {
+        btnSaveApiUrl.addEventListener('click', () => {
+            const url = ampApiUrlInput.value.trim();
+            if (!url) {
+                showToast('Please enter a valid URL', true);
+                return;
+            }
+            localStorage.setItem('amp_api_url', url);
+            showToast('API Endpoint saved successfully!');
+            fetchAmpStatus();
+        });
+    }
+
+    if (btnRefreshStatus) {
+        btnRefreshStatus.addEventListener('click', () => {
+            fetchAmpStatus();
+        });
+    }
+
+    async function fetchAmpStatus() {
+        if (!ampApiUrlInput) return;
+        const url = ampApiUrlInput.value.trim();
+        if (!url) return;
+
+        // Show loader, hide error and grid
+        if (ampLoader) ampLoader.style.display = 'flex';
+        if (ampError) ampError.style.display = 'none';
+        if (serversGrid) serversGrid.innerHTML = '';
+
+        try {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(id);
+
+            if (!response.ok) {
+                throw new Error(`HTTP Error: ${response.status}`);
+            }
+
+            const servers = await response.json();
+            if (ampLoader) ampLoader.style.display = 'none';
+
+            if (!serversGrid) return;
+            if (!Array.isArray(servers) || servers.length === 0) {
+                serversGrid.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-secondary);">
+                        <i class="fa-solid fa-server" style="font-size: 32px; margin-bottom: 10px; display: block; color: var(--border-color);"></i>
+                        <p>No managed servers were found on this AMP instance.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            renderServers(servers);
+        } catch (err) {
+            if (ampLoader) ampLoader.style.display = 'none';
+            if (ampError) ampError.style.display = 'flex';
+            if (ampErrorText) ampErrorText.textContent = `Failed to contact bridge at ${url}. Details: ${err.message}`;
+            console.error('AMP fetch error:', err);
+        }
+    }
+
+    function renderServers(servers) {
+        if (!serversGrid) return;
+        serversGrid.innerHTML = servers.map(server => {
+            const isOnline = server.running;
+            const moduleName = server.module || 'Generic';
+            
+            // Get module icon
+            let iconClass = 'fa-solid fa-server';
+            const normModule = moduleName.toLowerCase();
+            if (normModule.includes('minecraft')) {
+                iconClass = 'fa-solid fa-cubes';
+            } else if (normModule.includes('rust')) {
+                iconClass = 'fa-solid fa-radiation';
+            } else if (normModule.includes('ark')) {
+                iconClass = 'fa-solid fa-dragon';
+            } else if (normModule.includes('valheim') || normModule.includes('enshrouded')) {
+                iconClass = 'fa-solid fa-tree';
+            } else if (normModule.includes('palworld')) {
+                iconClass = 'fa-solid fa-paw';
+            } else if (normModule.includes('csgo') || normModule.includes('counterstrike')) {
+                iconClass = 'fa-solid fa-crosshairs';
+            } else if (normModule.includes('factorio')) {
+                iconClass = 'fa-solid fa-industry';
+            } else if (normModule.includes('satisfactory')) {
+                iconClass = 'fa-solid fa-wrench';
+            } else if (normModule.includes('gmod') || normModule.includes('garry')) {
+                iconClass = 'fa-solid fa-circle-nodes';
+            }
+
+            return `
+                <div class="server-card">
+                    <div class="server-card-header">
+                        <div class="server-icon">
+                            <i class="${iconClass}"></i>
+                        </div>
+                        <div class="server-card-header-text">
+                            <h4>${server.name}</h4>
+                            <span>${moduleName}</span>
+                        </div>
+                    </div>
+                    <div class="server-card-status ${isOnline ? 'online' : 'offline'}">
+                        <i class="fa-solid ${isOnline ? 'fa-circle-check' : 'fa-circle-xmark'}"></i>
+                        <span>${isOnline ? 'ONLINE' : 'OFFLINE'}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
 
     updateEmbedPreview();
     updateRssCommands();

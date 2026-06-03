@@ -40,6 +40,10 @@
                     <i class="fa-solid fa-rocket"></i>
                     <span>Quick Deployer</span>
                 </button>
+                <button class="nav-btn" data-tab="amp-status">
+                    <i class="fa-solid fa-server"></i>
+                    <span>AMP Status</span>
+                </button>
                 <button class="nav-btn" data-tab="documentation">
                     <i class="fa-solid fa-book"></i>
                     <span>Documentation</span>
@@ -323,6 +327,55 @@ See you out in the deep desert. *The spice must flow!* 🏜️</textarea>
                             <p>Admin category quick visibility panel controller.</p>
                             <pre><code class="fira-font">[p]afterwork deploy hide</code></pre>
                             <button class="deploy-copy-btn btn-sm" data-copy="[p]afterwork deploy hide"><i class="fa-solid fa-copy"></i> Copy</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: AMP Status -->
+            <section id="amp-status" class="tab-content">
+                <div class="amp-status-layout">
+                    <!-- Config Panel -->
+                    <div class="panel config-panel">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-gears"></i> API Settings</h3>
+                        </div>
+                        <div class="panel-body">
+                            <div class="form-group">
+                                <label for="amp-api-url">Status Bridge API Endpoint</label>
+                                <div class="input-with-button">
+                                    <input type="url" id="amp-api-url" placeholder="e.g. http://your-server-ip:9876/api/status" value="http://localhost:9876/api/status">
+                                    <button type="button" id="btn-save-api-url" class="btn-sm"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+                                </div>
+                                <p class="form-help">Enter the public URL of the Go service running on your server. If running on the same machine, use <code>http://localhost:9876/api/status</code>.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Servers Display Panel -->
+                    <div class="panel servers-panel">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-server"></i> Managed Game Servers</h3>
+                            <button type="button" id="btn-refresh-status" class="btn-sm secondary"><i class="fa-solid fa-rotate"></i> Refresh Status</button>
+                        </div>
+                        <div class="panel-body scrollable">
+                            <!-- Loader -->
+                            <div id="amp-loader" class="amp-loader-container" style="display: none;">
+                                <div class="spinner"></div>
+                                <p>Contacting status bridge...</p>
+                            </div>
+
+                            <!-- Error Message -->
+                            <div id="amp-error" class="amp-error-container" style="display: none;">
+                                <i class="fa-solid fa-circle-exclamation"></i>
+                                <h4>Unable to reach status bridge</h4>
+                                <p id="amp-error-text">Please check that the Go service is active and the port is open.</p>
+                            </div>
+
+                            <!-- Servers List Grid -->
+                            <div id="servers-grid" class="servers-grid">
+                                <!-- Dynamic server status cards will be loaded here -->
+                            </div>
                         </div>
                     </div>
                 </div>
