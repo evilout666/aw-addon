@@ -1,11 +1,76 @@
 // Afterwork Dashboard Controller Logic
 
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Navigation System ---
+    // --- Centralized DOM Variable Declarations (Avoid TDZ / Reference Errors) ---
+    
+    // Navigation Elements
     const navButtons = document.querySelectorAll('.nav-btn');
     const tabContents = document.querySelectorAll('.tab-content');
     const tabTitle = document.getElementById('tab-title');
     const tabSubtitle = document.getElementById('tab-subtitle');
+
+    // AMP Status Configuration & Control Elements
+    const toggleAmpStatus = document.getElementById('toggle-amp-status');
+    const ampStatusBtn = document.querySelector('.nav-btn[data-tab="amp-status"]');
+    const ampApiUrlInput = document.getElementById('amp-api-url');
+    const btnSaveApiUrl = document.getElementById('btn-save-api-url');
+    const btnRefreshStatus = document.getElementById('btn-refresh-status');
+    const ampLoader = document.getElementById('amp-loader');
+    const ampError = document.getElementById('amp-error');
+    const ampErrorText = document.getElementById('amp-error-text');
+    const serversGrid = document.getElementById('servers-grid');
+
+    // Live Control Elements
+    const toggleLiveControl = document.getElementById('toggle-live-control');
+    const channelInputGroup = document.getElementById('channel-input-group');
+    const channelSelectGroup = document.getElementById('channel-select-group');
+    const liveSettingsGroup = document.getElementById('live-settings-group');
+    const sendLiveBtn = document.getElementById('send-live-btn');
+    const backendApiUrlInput = document.getElementById('backend-api-url');
+    const btnSaveBackendUrl = document.getElementById('btn-save-backend-url');
+    const btnRefreshChannels = document.getElementById('btn-refresh-channels');
+    const embedChannelSelect = document.getElementById('embed-channel-select');
+
+    // Toast Elements
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toast-message');
+
+    // Embed Form Inputs
+    const embedChannel = document.getElementById('embed-channel');
+    const embedTitle = document.getElementById('embed-title');
+    const embedDescription = document.getElementById('embed-description');
+    const embedColor = document.getElementById('embed-color');
+    const embedColorHex = document.getElementById('embed-color-hex');
+    const embedThumbnail = document.getElementById('embed-thumbnail');
+    const embedImage = document.getElementById('embed-image');
+    const addFieldBtn = document.getElementById('add-field-btn');
+    const fieldsContainer = document.getElementById('fields-container');
+
+    // Embed Preview Elements
+    const previewEmbedBorder = document.getElementById('preview-embed-border');
+    const previewTitle = document.getElementById('preview-title');
+    const previewDescription = document.getElementById('preview-description');
+    const previewFields = document.getElementById('preview-fields');
+    const previewThumbnailContainer = document.getElementById('preview-thumbnail-container');
+    const previewThumbnail = document.getElementById('preview-thumbnail');
+    const previewImageContainer = document.getElementById('preview-image-container');
+    const previewImage = document.getElementById('preview-image');
+
+    // Outputs
+    const generatedCommand = document.getElementById('generated-command');
+    const copyCmdBtn = document.getElementById('copy-cmd-btn');
+    const copyJsonBtn = document.getElementById('copy-json-btn');
+
+    // RSS Inputs & Outputs
+    const rssName = document.getElementById('rss-name');
+    const rssChannel = document.getElementById('rss-channel');
+    const rssUrl = document.getElementById('rss-url');
+    const rssAddCmd = document.getElementById('rss-add-cmd');
+    const rssRemoveCmd = document.getElementById('rss-remove-cmd');
+    const copyRssAddBtn = document.getElementById('copy-rss-add-btn');
+    const copyRssRemoveBtn = document.getElementById('copy-rss-remove-btn');
+
+    // --- Navigation System ---
 
     const tabMeta = {
         'embed-builder': {
@@ -60,8 +125,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- AMP Status Tab Toggle Logic ---
-    const toggleAmpStatus = document.getElementById('toggle-amp-status');
-    const ampStatusBtn = document.querySelector('.nav-btn[data-tab="amp-status"]');
 
     // Initialize state from localStorage (default: hidden)
     const isAmpEnabled = localStorage.getItem('show-amp-status') === 'true';
@@ -81,15 +144,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Live Control Mode Toggle Logic ---
-    const toggleLiveControl = document.getElementById('toggle-live-control');
-    const channelInputGroup = document.getElementById('channel-input-group');
-    const channelSelectGroup = document.getElementById('channel-select-group');
-    const liveSettingsGroup = document.getElementById('live-settings-group');
-    const sendLiveBtn = document.getElementById('send-live-btn');
-    const backendApiUrlInput = document.getElementById('backend-api-url');
-    const btnSaveBackendUrl = document.getElementById('btn-save-backend-url');
-    const btnRefreshChannels = document.getElementById('btn-refresh-channels');
-    const embedChannelSelect = document.getElementById('embed-channel-select');
 
     // Load connection settings
     const savedGoBackendUrl = localStorage.getItem('go_backend_url') || 'http://localhost:9876';
@@ -124,7 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (enabled) {
                 fetchBotChannels();
             } else {
-                updateGeneratedCommand();
+                updateEmbedPreview();
             }
         });
     }
@@ -161,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (embedChannelSelect) {
-        embedChannelSelect.addEventListener('change', updateGeneratedCommand);
+        embedChannelSelect.addEventListener('change', updateEmbedPreview);
     }
 
     async function fetchBotChannels() {
@@ -193,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ).join('');
             
             embedChannelSelect.disabled = false;
-            updateGeneratedCommand();
+            updateEmbedPreview();
         } catch (err) {
             console.error('Failed to fetch channels:', err);
             embedChannelSelect.innerHTML = `<option value="">⚠️ Connection failed</option>`;
@@ -282,8 +336,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Toast Notification System ---
-    const toast = document.getElementById('toast');
-    const toastMessage = document.getElementById('toast-message');
     let toastTimeout = null;
 
     function showToast(message, isError = false) {
@@ -320,31 +372,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Embed Builder Logic ---
-    const embedChannel = document.getElementById('embed-channel');
-    const embedTitle = document.getElementById('embed-title');
-    const embedDescription = document.getElementById('embed-description');
-    const embedColor = document.getElementById('embed-color');
-    const embedColorHex = document.getElementById('embed-color-hex');
-    const embedThumbnail = document.getElementById('embed-thumbnail');
-    const embedImage = document.getElementById('embed-image');
-    
-    const addFieldBtn = document.getElementById('add-field-btn');
-    const fieldsContainer = document.getElementById('fields-container');
-    
-    // Preview fields
-    const previewEmbedBorder = document.getElementById('preview-embed-border');
-    const previewTitle = document.getElementById('preview-title');
-    const previewDescription = document.getElementById('preview-description');
-    const previewFields = document.getElementById('preview-fields');
-    const previewThumbnailContainer = document.getElementById('preview-thumbnail-container');
-    const previewThumbnail = document.getElementById('preview-thumbnail');
-    const previewImageContainer = document.getElementById('preview-image-container');
-    const previewImage = document.getElementById('preview-image');
-    
-    // Outputs
-    const generatedCommand = document.getElementById('generated-command');
-    const copyCmdBtn = document.getElementById('copy-cmd-btn');
-    const copyJsonBtn = document.getElementById('copy-json-btn');
 
     let embedFieldsList = [];
 
@@ -554,15 +581,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- RSS Feed Logic ---
-    const rssName = document.getElementById('rss-name');
-    const rssChannel = document.getElementById('rss-channel');
-    const rssUrl = document.getElementById('rss-url');
-    
-    const rssAddCmd = document.getElementById('rss-add-cmd');
-    const rssRemoveCmd = document.getElementById('rss-remove-cmd');
-    
-    const copyRssAddBtn = document.getElementById('copy-rss-add-btn');
-    const copyRssRemoveBtn = document.getElementById('copy-rss-remove-btn');
 
     function updateRssCommands() {
         const name = (rssName.value.trim() || 'github-news').toLowerCase().replace(/\s+/g, '-');
@@ -641,13 +659,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- AMP Status Logic ---
-    const ampApiUrlInput = document.getElementById('amp-api-url');
-    const btnSaveApiUrl = document.getElementById('btn-save-api-url');
-    const btnRefreshStatus = document.getElementById('btn-refresh-status');
-    const ampLoader = document.getElementById('amp-loader');
-    const ampError = document.getElementById('amp-error');
-    const ampErrorText = document.getElementById('amp-error-text');
-    const serversGrid = document.getElementById('servers-grid');
 
     // Load saved API URL from localStorage
     const savedApiUrl = localStorage.getItem('amp_api_url');
