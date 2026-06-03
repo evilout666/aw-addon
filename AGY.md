@@ -10,7 +10,7 @@ The project is split into two dedicated branches. Ensure you are committing code
 
 | Branch | Description | Tech Stack | Root Files |
 | --- | --- | --- | --- |
-| **`main`** | Discord bot cog & Static Web UI | Python (Red-DiscordBot, discord.py) & Vanilla Web | `afterwork/`, `index.html`, `app.js`, `style.css`, `README.md`, `STATUS.md`, `AGY.md` |
+| **`main`** | Discord bot cog & Static Web UI | Python (Red-DiscordBot, discord.py) & Vanilla Web | `afterwork/`, `web/`, `README.md`, `STATUS.md`, `AGY.md` |
 | **`backend`** | Go status bridge service | Go (CubeCoders AMP status client) | `main.go`, `install.sh`, `README.md` |
 
 ---
@@ -56,6 +56,7 @@ To prevent namespace collisions within the single unified cog class:
 ---
 
 ## 💻 Web Dashboard Guidelines (`main` branch)
+* **Files Location:** Located in the **[web/](file:///root/projects/redbot-cogs/aw-addon/web)** folder.
 * **Tech Stack:** Vanilla HTML/JS/CSS.
 * **Aesthetics:** High-end premium dark mode theme, using modern fonts, responsive grids, and clean visual indicators.
 * **Deployment:** Hosted manually.

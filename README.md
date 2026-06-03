@@ -79,7 +79,7 @@ curl -fsSL https://raw.githubusercontent.com/evilout666/aw-addon/backend/install
 This repository uses a two-branch layout to isolate the Discord Bot Cog & Web Dashboard from the Go Status Service:
 
 * **[afterwork/](file:///root/projects/redbot-cogs/aw-addon/afterwork)** (Python): The Discord bot cog files (located on this **`main`** branch).
-* **[index.html](file:///root/projects/redbot-cogs/aw-addon/index.html)**, **[app.js](file:///root/projects/redbot-cogs/aw-addon/app.js)**, **[style.css](file:///root/projects/redbot-cogs/aw-addon/style.css)**: The static web control dashboard files (located on this **`main`** branch).
+* **[web/](file:///root/projects/redbot-cogs/aw-addon/web)** (Static HTML/JS/CSS): The static web control dashboard files (located on this **`main`** branch).
 * **[AGY.md](file:///root/projects/redbot-cogs/aw-addon/AGY.md)**: AI assistant coding standards and branch directory definitions.
 * **[STATUS.md](file:///root/projects/redbot-cogs/aw-addon/STATUS.md)**: Feature logs and future ideas status board.
 * **`backend` Branch** (Go): Contains the Go server status bridge.
