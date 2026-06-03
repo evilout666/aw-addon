@@ -198,6 +198,8 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Failed to fetch channels:', err);
             embedChannelSelect.innerHTML = `<option value="">⚠️ Connection failed</option>`;
             showToast('Failed to load live channel list', true);
+            const details = getDetailedConnectionError(baseUrl, err);
+            alert(details);
         }
     }
 
@@ -244,11 +246,39 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (err) {
                 console.error('Failed to post embed live:', err);
                 showToast(err.message || 'Failed to post embed live', true);
+                const details = getDetailedConnectionError(baseUrl, err);
+                alert(details);
             } finally {
                 sendLiveBtn.disabled = false;
                 sendLiveBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Live to Discord';
             }
         });
+    }
+
+    // --- Connection Error Diagnostic Helper ---
+    function getDetailedConnectionError(url, err) {
+        let isHttps = window.location.protocol === 'https:';
+        let targetIsHttp = url.startsWith('http://');
+        let isLocal = url.includes('localhost') || url.includes('127.0.0.1') || url.includes('::1');
+        
+        let details = `Error Details: ${err.message || err}\n\n`;
+        
+        if (isHttps && targetIsHttp && !isLocal) {
+            details += `🔒 SECURITY WARNING (Mixed Content Block):\n`;
+            details += `You are accessing this dashboard over a secure connection (https://dash.afterworkplay.com), but your Go backend is configured to use unencrypted HTTP (${url}).\n\n`;
+            details += `Modern web browsers block HTTPS websites from requesting HTTP endpoints for security reasons.\n\n`;
+            details += `HOW TO FIX THIS:\n`;
+            details += `1. Access the dashboard over HTTP instead (e.g. http://dash.afterworkplay.com if supported).\n`;
+            details += `2. Or, configure SSL for your Go backend using a reverse proxy (like Caddy, Nginx, or a Cloudflare Tunnel) so you can use https:// for the backend URL.`;
+        } else {
+            details += `🌐 NETWORK / FIREWALL WARNING:\n`;
+            details += `The dashboard was unable to contact the backend service at ${url}.\n\n`;
+            details += `HOW TO TROUBLESHOOT:\n`;
+            details += `1. Verify the service is active on your server: 'sudo systemctl status afterwork'\n`;
+            details += `2. Ensure your server's firewall allows port 9876: 'sudo ufw allow 9876'\n`;
+            details += `3. Verify that your server IP (${url}) is correct and accessible from your current device (e.g., check if you are on the same local network/VPN).`;
+        }
+        return details;
     }
 
     // --- Toast Notification System ---
@@ -694,8 +724,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             if (ampLoader) ampLoader.style.display = 'none';
             if (ampError) ampError.style.display = 'flex';
-            if (ampErrorText) ampErrorText.textContent = `Failed to contact bridge at ${url}. Details: ${err.message}`;
+            const details = getDetailedConnectionError(url, err);
+            if (ampErrorText) ampErrorText.innerText = details;
             console.error('AMP fetch error:', err);
+            alert(details);
         }
     }
 
