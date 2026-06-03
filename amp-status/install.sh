@@ -30,14 +30,72 @@ echo "✅ Build completed: /usr/local/bin/antigravity-amp"
 # Create config directory
 mkdir -p /etc/antigravity-amp
 
-# Deploy config file if not already present
-if [ ! -f /etc/antigravity-amp/config.json ]; then
-    echo "⚙️ Creating configuration at /etc/antigravity-amp/config.json..."
-    cp config.json.example /etc/antigravity-amp/config.json
-    echo "⚠️ NOTE: Please edit /etc/antigravity-amp/config.json with your AMP credentials!"
+# Simple function to extract JSON field value (perl-compatible regex)
+get_json_val() {
+    local file="$1"
+    local key="$2"
+    local default="$3"
+    if [ -f "$file" ]; then
+        local val=$(grep -Po '"'"$key"'"\s*:\s*"\K[^"]*' "$file" 2>/dev/null || grep -Po '"'"$key"'"\s*:\s*\K[0-9]*' "$file" 2>/dev/null || echo "")
+        echo "${val:-$default}"
+    else
+        echo "$default"
+    fi
+}
+
+# --- Configuration Wizard ---
+echo ""
+echo "⚙️  Configuring AMP Status Bridge..."
+CONFIG_FILE="/etc/antigravity-amp/config.json"
+
+# Load existing values or defaults from config.json or config.json.example
+TEMPLATE_FILE="config.json.example"
+if [ -f "$CONFIG_FILE" ]; then
+    BASE_FILE="$CONFIG_FILE"
 else
-    echo "ℹ️ Existing configuration found at /etc/antigravity-amp/config.json. Skipping overwrite."
+    BASE_FILE="$TEMPLATE_FILE"
 fi
+
+EXISTING_URL=$(get_json_val "$BASE_FILE" "amp_url" "http://localhost:8080")
+EXISTING_USER=$(get_json_val "$BASE_FILE" "amp_username" "admin")
+EXISTING_PASS=$(get_json_val "$BASE_FILE" "amp_password" "")
+EXISTING_BIND=$(get_json_val "$BASE_FILE" "bind_address" "0.0.0.0:9876")
+EXISTING_CACHE=$(get_json_val "$BASE_FILE" "cache_duration_seconds" "10")
+
+# Ask questions with defaults
+read -p "  AMP URL [$EXISTING_URL]: " input_url
+AMP_URL="${input_url:-$EXISTING_URL}"
+
+read -p "  AMP Username [$EXISTING_USER]: " input_user
+AMP_USERNAME="${input_user:-$EXISTING_USER}"
+
+# Prompt for password. If existing password exists, show default option to keep it
+if [ -n "$EXISTING_PASS" ] && [ "$EXISTING_PASS" != "yourpasswordhere" ]; then
+    read -p "  AMP Password [keep existing password]: " input_pass
+    AMP_PASSWORD="${input_pass:-$EXISTING_PASS}"
+else
+    read -p "  AMP Password: " input_pass
+    AMP_PASSWORD="$input_pass"
+fi
+
+read -p "  Bind Address [$EXISTING_BIND]: " input_bind
+BIND_ADDRESS="${input_bind:-$EXISTING_BIND}"
+
+read -p "  Cache Duration (seconds) [$EXISTING_CACHE]: " input_cache
+CACHE_DURATION="${input_cache:-$EXISTING_CACHE}"
+
+# Write config file
+cat << EOF > "$CONFIG_FILE"
+{
+  "amp_url": "${AMP_URL}",
+  "amp_username": "${AMP_USERNAME}",
+  "amp_password": "${AMP_PASSWORD}",
+  "bind_address": "${BIND_ADDRESS}",
+  "cache_duration_seconds": ${CACHE_DURATION}
+}
+EOF
+echo "✅ Configuration saved to $CONFIG_FILE"
+echo ""
 
 # Determine service User and Group
 SERVICE_USER="root"
