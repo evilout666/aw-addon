@@ -977,6 +977,10 @@ class Afterwork(commands.Cog, name="Afterwork"):
             member_base_role_id=None,
             member_ark_role_id=None,
             member_dune_role_id=None,
+            # News
+            news_setup_message_id=None,
+            news_channel_id=None,
+            last_news_id=None,
         )
 
         self.config.register_global(
@@ -1029,6 +1033,8 @@ class Afterwork(commands.Cog, name="Afterwork"):
             self._read_feeds_loop = self.bot.loop.create_task(self.read_feeds())
 
     def cog_unload(self):
+        if hasattr(self, '_news_loop') and self._news_loop:
+            self._news_loop.cancel()
         for task in self.update_tasks.values():
             task.cancel()
         if self._read_feeds_loop:
@@ -1325,6 +1331,11 @@ class Afterwork(commands.Cog, name="Afterwork"):
         """Deploys the persistent settings panel for Membership."""
         await self.afterwork_member_deploy(ctx)
 
+    @afterwork_deploy_group.command(name="news")
+    async def afterwork_news_deploy_cmd(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for Website News Auto-Poster."""
+        await self.afterwork_news_deploy(ctx)
+
     # --- RSS SUBCOMMAND GROUP ---
 
     @afterwork_group.group(name="rss")
@@ -1613,6 +1624,21 @@ class Afterwork(commands.Cog, name="Afterwork"):
         
         msg = await ctx.send(embed=embed, view=MemberSetupView(self))
         await self.config.guild(ctx.guild).member_setup_message_id.set(msg.id)
+
+    async def afterwork_news_deploy(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for News Auto-Poster."""
+        old_message_id = await self.config.guild(ctx.guild).news_setup_message_id()
+        if old_message_id:
+            try:
+                old_message = await ctx.channel.fetch_message(old_message_id)
+                await old_message.delete()
+            except Exception: pass
+
+        embed = discord.Embed(title="⚙️ Website News Auto-Poster", description="Loading...", color=discord.Color.gold())
+        await _update_news_setup_embed(self, ctx.guild, embed)
+        
+        msg = await ctx.send(embed=embed, view=NewsSetupView(self))
+        await self.config.guild(ctx.guild).news_setup_message_id.set(msg.id)
 
     async def afterwork_hide_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Hide Category Visibility."""
@@ -2360,3 +2386,104 @@ async def _update_member_setup_embed(cog, guild: discord.Guild, embed: discord.E
     embed.add_field(name="Base Role", value=f"<@&{base_id}>" if base_id else "Not Set", inline=True)
     embed.add_field(name="Ark Role", value=f"<@&{ark_id}>" if ark_id else "Not Set", inline=True)
     embed.add_field(name="Dune Role", value=f"<@&{dune_id}>" if dune_id else "Not Set", inline=True)
+
+
+# --- NEWS AUTO-POSTER ---
+
+class NewsSetChannelModal(discord.ui.Modal, title="Set News Channel"):
+    channel_input = discord.ui.TextInput(label="Channel ID", style=discord.TextStyle.short, required=True, max_length=25)
+
+    def __init__(self, cog, original_message: discord.Message):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.original_message = original_message
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            channel_id = int(self.channel_input.value.strip())
+        except ValueError:
+            return await interaction.followup.send("❌ **Error:** Channel ID must be a number.", ephemeral=True)
+            
+        channel = interaction.guild.get_channel(channel_id)
+        if not channel or not isinstance(channel, discord.TextChannel):
+            return await interaction.followup.send("❌ **Error:** Channel not found.", ephemeral=True)
+            
+        await self.cog.config.guild(interaction.guild).news_channel_id.set(channel_id)
+                
+        embed = self.original_message.embeds[0]
+        embed.set_footer(text=_get_admin_footer(interaction, "Updated News Channel"))
+        await _update_news_setup_embed(self.cog, interaction.guild, embed)
+        await self.original_message.edit(embed=embed, view=NewsSetupView(self.cog))
+        await interaction.followup.send(f"✅ News Auto-Poster channel set to {channel.mention}.", ephemeral=True)
+
+class NewsSetupView(discord.ui.View):
+    def __init__(self, cog):
+        super().__init__(timeout=None)
+        self.cog = cog
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if await self.cog.bot.is_owner(interaction.user):
+            return True
+        await _send_owner_dm(self.cog.bot, f"User {interaction.user.display_name} attempted to use owner controls in {interaction.guild.name}.")
+        return False
+
+    @discord.ui.button(label="Set Posting Channel", style=discord.ButtonStyle.primary, custom_id="news_set_channel", emoji="📰")
+    async def set_channel_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(NewsSetChannelModal(self.cog, interaction.message))
+
+async def _update_news_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
+    channel_id = await cog.config.guild(guild).news_channel_id()
+    embed.title = "⚙️ Website News Auto-Poster Setup"
+    embed.description = "When you post a new News item on afterworkplay.com, it will automatically be posted as an Embed in this channel within 60 seconds."
+    embed.color = discord.Color.gold()
+    embed.clear_fields()
+    embed.add_field(name="Target Channel", value=f"<#{channel_id}>" if channel_id else "Not Set", inline=False)
+
+# Add this method inside Afterwork class dynamically:
+async def news_polling_task(self):
+    await self.bot.wait_until_ready()
+    while not self.bot.is_closed():
+        try:
+            # We poll the public API
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://afterworkplay.com/api/db/news") as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data and len(data) > 0:
+                            latest_news = data[0]
+                            news_id = str(latest_news.get("id"))
+                            
+                            for guild in self.bot.guilds:
+                                channel_id = await self.config.guild(guild).news_channel_id()
+                                if channel_id:
+                                    last_id = await self.config.guild(guild).last_news_id()
+                                    if last_id != news_id:
+                                        # NEW POST!
+                                        channel = guild.get_channel(channel_id)
+                                        if channel:
+                                            # Build embed
+                                            embed = discord.Embed(
+                                                title=latest_news.get("title", "New Update!"),
+                                                description=latest_news.get("content", ""),
+                                                color=discord.Color.blue(),
+                                                url="https://afterworkplay.com"
+                                            )
+                                            if latest_news.get("subtitle"):
+                                                embed.add_field(name="Details", value=latest_news.get("subtitle"), inline=False)
+                                            if latest_news.get("image_url"):
+                                                embed.set_image(url=latest_news.get("image_url"))
+                                            if latest_news.get("module_id"):
+                                                embed.set_footer(text=f"Module: {latest_news.get('module_id')}")
+                                                
+                                            try:
+                                                await channel.send(embed=embed)
+                                                await self.config.guild(guild).last_news_id.set(news_id)
+                                            except discord.Forbidden:
+                                                pass
+        except Exception as e:
+            log.error(f"News Polling Task Error: {e}")
+            
+        await asyncio.sleep(60)
+
+Afterwork.news_polling_task = news_polling_task
