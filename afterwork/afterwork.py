@@ -977,10 +977,11 @@ class Afterwork(commands.Cog, name="Afterwork"):
             member_base_role_id=None,
             member_ark_role_id=None,
             member_dune_role_id=None,
-            # News
-            news_setup_message_id=None,
-            news_channel_id=None,
-            last_news_id=None,
+            # Repost
+            repost_setup_message_id=None,
+            repost_channels={},
+            repost_last_news_id=0,
+            repost_last_events_id=0,
         )
 
         self.config.register_global(
@@ -1033,8 +1034,8 @@ class Afterwork(commands.Cog, name="Afterwork"):
             self._read_feeds_loop = self.bot.loop.create_task(self.read_feeds())
 
     def cog_unload(self):
-        if hasattr(self, '_news_loop') and self._news_loop:
-            self._news_loop.cancel()
+        if hasattr(self, '_repost_loop') and self._repost_loop:
+            self._repost_loop.cancel()
         for task in self.update_tasks.values():
             task.cancel()
         if self._read_feeds_loop:
@@ -1332,9 +1333,9 @@ class Afterwork(commands.Cog, name="Afterwork"):
         await self.afterwork_member_deploy(ctx)
 
     @afterwork_deploy_group.command(name="repost")
-    async def afterwork_news_deploy_cmd(self, ctx: commands.Context):
-        """Deploys the persistent settings panel for Website News Auto-Poster."""
-        await self.afterwork_news_deploy(ctx)
+    async def afterwork_repost_deploy_cmd(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for Website News & Events Reposter."""
+        await self.afterwork_repost_deploy(ctx)
 
     # --- RSS SUBCOMMAND GROUP ---
 
@@ -2388,9 +2389,10 @@ async def _update_member_setup_embed(cog, guild: discord.Guild, embed: discord.E
     embed.add_field(name="Dune Role", value=f"<@&{dune_id}>" if dune_id else "Not Set", inline=True)
 
 
-# --- NEWS AUTO-POSTER ---
+# --- REPOST AUTO-POSTER ---
 
-class NewsSetChannelModal(discord.ui.Modal, title="Set News Channel"):
+class RepostAddLinkModal(discord.ui.Modal, title="Add Module Repost Link"):
+    module_input = discord.ui.TextInput(label="Module ID (e.g. ark, dune, global)", style=discord.TextStyle.short, required=True, max_length=25)
     channel_input = discord.ui.TextInput(label="Channel ID", style=discord.TextStyle.short, required=True, max_length=25)
 
     def __init__(self, cog, original_message: discord.Message):
@@ -2400,6 +2402,11 @@ class NewsSetChannelModal(discord.ui.Modal, title="Set News Channel"):
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
+        
+        module_id = self.module_input.value.strip().lower()
+        if module_id == 'global':
+            module_id = 'global' # We will use 'global' key for null modules
+            
         try:
             channel_id = int(self.channel_input.value.strip())
         except ValueError:
@@ -2407,17 +2414,18 @@ class NewsSetChannelModal(discord.ui.Modal, title="Set News Channel"):
             
         channel = interaction.guild.get_channel(channel_id)
         if not channel or not isinstance(channel, discord.TextChannel):
-            return await interaction.followup.send("❌ **Error:** Channel not found.", ephemeral=True)
+            return await interaction.followup.send("❌ **Error:** Text Channel not found.", ephemeral=True)
             
-        await self.cog.config.guild(interaction.guild).news_channel_id.set(channel_id)
+        async with self.cog.config.guild(interaction.guild).repost_channels() as channels:
+            channels[module_id] = channel_id
                 
         embed = self.original_message.embeds[0]
-        embed.set_footer(text=_get_admin_footer(interaction, "Updated News Channel"))
-        await _update_news_setup_embed(self.cog, interaction.guild, embed)
-        await self.original_message.edit(embed=embed, view=NewsSetupView(self.cog))
-        await interaction.followup.send(f"✅ News Auto-Poster channel set to {channel.mention}.", ephemeral=True)
+        embed.set_footer(text=_get_admin_footer(interaction, f"Added Repost Link for {module_id}"))
+        await _update_repost_setup_embed(self.cog, interaction.guild, embed)
+        await self.original_message.edit(embed=embed, view=RepostSetupView(self.cog))
+        await interaction.followup.send(f"✅ News & Events for `{module_id}` will now be posted to {channel.mention}.", ephemeral=True)
 
-class NewsSetupView(discord.ui.View):
+class RepostSetupView(discord.ui.View):
     def __init__(self, cog):
         super().__init__(timeout=None)
         self.cog = cog
@@ -2428,62 +2436,137 @@ class NewsSetupView(discord.ui.View):
         await _send_owner_dm(self.cog.bot, f"User {interaction.user.display_name} attempted to use owner controls in {interaction.guild.name}.")
         return False
 
-    @discord.ui.button(label="Set Posting Channel", style=discord.ButtonStyle.primary, custom_id="news_set_channel", emoji="📰")
-    async def set_channel_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(NewsSetChannelModal(self.cog, interaction.message))
+    @discord.ui.button(label="Add Module Link", style=discord.ButtonStyle.primary, custom_id="repost_add_link", emoji="🔗")
+    async def add_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(RepostAddLinkModal(self.cog, interaction.message))
+        
+    @discord.ui.button(label="Clear Links", style=discord.ButtonStyle.danger, custom_id="repost_clear_links", emoji="🗑️")
+    async def clear_links_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.config.guild(interaction.guild).repost_channels.set({})
+        embed = interaction.message.embeds[0]
+        embed.set_footer(text=_get_admin_footer(interaction, "Cleared all Repost Links"))
+        await _update_repost_setup_embed(self.cog, interaction.guild, embed)
+        await interaction.response.edit_message(embed=embed, view=self)
+        await interaction.followup.send("✅ All module links cleared.", ephemeral=True)
 
-async def _update_news_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
-    channel_id = await cog.config.guild(guild).news_channel_id()
-    embed.title = "⚙️ Website News Auto-Poster Setup"
-    embed.description = "When you post a new News item on afterworkplay.com, it will automatically be posted as an Embed in this channel within 60 seconds."
+async def _update_repost_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
+    channels = await cog.config.guild(guild).repost_channels()
+    embed.title = "⚙️ Website News & Events Reposter Setup"
+    embed.description = "Link website Modules to Discord Channels. When a new post is made on the website for a linked module, it will automatically be posted here."
     embed.color = discord.Color.gold()
     embed.clear_fields()
-    embed.add_field(name="Target Channel", value=f"<#{channel_id}>" if channel_id else "Not Set", inline=False)
+    
+    if not channels:
+        embed.add_field(name="Linked Modules", value="None configured. Click 'Add Module Link' below.", inline=False)
+    else:
+        text = ""
+        for mod, chan_id in channels.items():
+            text += f"**{mod.upper()}** ➔ <#{chan_id}>
+"
+        embed.add_field(name="Linked Modules", value=text, inline=False)
 
 # Add this method inside Afterwork class dynamically:
-async def news_polling_task(self):
+async def repost_polling_task(self):
     await self.bot.wait_until_ready()
     while not self.bot.is_closed():
         try:
-            # We poll the public API
             async with aiohttp.ClientSession() as session:
+                # 1. Check News
                 async with session.get("https://afterworkplay.com/api/db/news") as resp:
                     if resp.status == 200:
-                        data = await resp.json()
-                        if data and len(data) > 0:
-                            latest_news = data[0]
-                            news_id = str(latest_news.get("id"))
+                        news_data = await resp.json()
+                        for guild in self.bot.guilds:
+                            last_news_id = await self.config.guild(guild).repost_last_news_id()
+                            channels = await self.config.guild(guild).repost_channels()
+                            if not channels: continue
                             
-                            for guild in self.bot.guilds:
-                                channel_id = await self.config.guild(guild).news_channel_id()
-                                if channel_id:
-                                    last_id = await self.config.guild(guild).last_news_id()
-                                    if last_id != news_id:
-                                        # NEW POST!
-                                        channel = guild.get_channel(channel_id)
-                                        if channel:
-                                            # Build embed
-                                            embed = discord.Embed(
-                                                title=latest_news.get("title", "New Update!"),
-                                                description=latest_news.get("content", ""),
-                                                color=discord.Color.blue(),
-                                                url="https://afterworkplay.com"
-                                            )
-                                            if latest_news.get("subtitle"):
-                                                embed.add_field(name="Details", value=latest_news.get("subtitle"), inline=False)
-                                            if latest_news.get("image_url"):
-                                                embed.set_image(url=latest_news.get("image_url"))
-                                            if latest_news.get("module_id"):
-                                                embed.set_footer(text=f"Module: {latest_news.get('module_id')}")
-                                                
-                                            try:
-                                                await channel.send(embed=embed)
-                                                await self.config.guild(guild).last_news_id.set(news_id)
-                                            except discord.Forbidden:
-                                                pass
-        except Exception as e:
-            log.error(f"News Polling Task Error: {e}")
-            
-        await asyncio.sleep(60)
+                            highest_seen_news = last_news_id
+                            
+                            # Sort old to new for posting
+                            new_posts = [n for n in news_data if int(n["id"]) > last_news_id]
+                            new_posts.sort(key=lambda x: int(x["id"]))
+                            
+                            for n in new_posts:
+                                nid = int(n["id"])
+                                if nid > highest_seen_news: highest_seen_news = nid
+                                
+                                mod_id = n.get("module_id") or "global"
+                                mod_id = mod_id.lower()
+                                
+                                if mod_id in channels:
+                                    chan_id = channels[mod_id]
+                                    channel = guild.get_channel(chan_id)
+                                    if channel:
+                                        embed = discord.Embed(
+                                            title=n.get("title", "New News!"),
+                                            description=n.get("content", ""),
+                                            color=discord.Color.blue(),
+                                            url="https://afterworkplay.com"
+                                        )
+                                        if n.get("subtitle"):
+                                            embed.add_field(name="Details", value=n.get("subtitle"), inline=False)
+                                        if n.get("image_url"):
+                                            embed.set_image(url=n.get("image_url"))
+                                        embed.set_footer(text=f"📰 News • Module: {mod_id.upper()}")
+                                        try:
+                                            await channel.send(embed=embed)
+                                        except discord.Forbidden:
+                                            pass
+                            if highest_seen_news > last_news_id:
+                                await self.config.guild(guild).repost_last_news_id.set(highest_seen_news)
 
-Afterwork.news_polling_task = news_polling_task
+                # 2. Check Events
+                async with session.get("https://afterworkplay.com/api/db/events") as resp:
+                    if resp.status == 200:
+                        events_data = await resp.json()
+                        for guild in self.bot.guilds:
+                            last_events_id = await self.config.guild(guild).repost_last_events_id()
+                            channels = await self.config.guild(guild).repost_channels()
+                            if not channels: continue
+                            
+                            highest_seen_event = last_events_id
+                            
+                            new_events = [e for e in events_data if int(e["id"]) > last_events_id]
+                            new_events.sort(key=lambda x: int(x["id"]))
+                            
+                            for e in new_events:
+                                eid = int(e["id"])
+                                if eid > highest_seen_event: highest_seen_event = eid
+                                
+                                mod_id = e.get("module_id") or "global"
+                                mod_id = mod_id.lower()
+                                
+                                if mod_id in channels:
+                                    chan_id = channels[mod_id]
+                                    channel = guild.get_channel(chan_id)
+                                    if channel:
+                                        embed = discord.Embed(
+                                            title=e.get("title", "New Event!"),
+                                            description=e.get("content", ""),
+                                            color=discord.Color.green(),
+                                            url="https://afterworkplay.com"
+                                        )
+                                        if e.get("subtitle"):
+                                            embed.add_field(name="Details", value=e.get("subtitle"), inline=False)
+                                            
+                                        # Parse Event Times
+                                        if e.get("start_date") and e.get("end_date"):
+                                            embed.add_field(name="Event Active From", value=f"{e['start_date']} to {e['end_date']}", inline=False)
+                                            
+                                        if e.get("image_url"):
+                                            embed.set_image(url=e.get("image_url"))
+                                        embed.set_footer(text=f"🗓️ Event • Module: {mod_id.upper()}")
+                                        try:
+                                            await channel.send(embed=embed)
+                                        except discord.Forbidden:
+                                            pass
+                            if highest_seen_event > last_events_id:
+                                await self.config.guild(guild).repost_last_events_id.set(highest_seen_event)
+
+        except Exception as e:
+            import logging
+            logging.getLogger("red.Afterwork").error(f"Repost Polling Task Error: {e}")
+            
+        await __import__('asyncio').sleep(60)
+
+Afterwork.repost_polling_task = repost_polling_task
