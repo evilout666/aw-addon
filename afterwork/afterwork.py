@@ -1626,20 +1626,20 @@ class Afterwork(commands.Cog, name="Afterwork"):
         msg = await ctx.send(embed=embed, view=MemberSetupView(self))
         await self.config.guild(ctx.guild).member_setup_message_id.set(msg.id)
 
-    async def afterwork_news_deploy(self, ctx: commands.Context):
-        """Deploys the persistent settings panel for News Auto-Poster."""
-        old_message_id = await self.config.guild(ctx.guild).news_setup_message_id()
+    async def afterwork_repost_deploy(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for News & Events Reposter."""
+        old_message_id = await self.config.guild(ctx.guild).repost_setup_message_id()
         if old_message_id:
             try:
                 old_message = await ctx.channel.fetch_message(old_message_id)
                 await old_message.delete()
             except Exception: pass
 
-        embed = discord.Embed(title="⚙️ Website News Auto-Poster", description="Loading...", color=discord.Color.gold())
-        await _update_news_setup_embed(self, ctx.guild, embed)
+        embed = discord.Embed(title="⚙️ Website Reposter Setup", description="Loading...", color=discord.Color.gold())
+        await _update_repost_setup_embed(self, ctx.guild, embed)
         
-        msg = await ctx.send(embed=embed, view=NewsSetupView(self))
-        await self.config.guild(ctx.guild).news_setup_message_id.set(msg.id)
+        msg = await ctx.send(embed=embed, view=RepostSetupView(self))
+        await self.config.guild(ctx.guild).repost_setup_message_id.set(msg.id)
 
     async def afterwork_hide_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Hide Category Visibility."""
