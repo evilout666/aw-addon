@@ -979,6 +979,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
             member_dune_role_id=None,
             # Repost
             repost_setup_message_id=None,
+            repost_enabled=True,
             repost_channels={},
             repost_last_news_id=0,
             repost_last_events_id=0,
@@ -1289,6 +1290,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
     # --- DEPLOY SUBCOMMAND GROUP ---
 
     @afterwork_group.group(name="deploy", invoke_without_command=True)
+    @commands.is_owner()
     async def afterwork_deploy_group(self, ctx: commands.Context):
         """Deploys one or all configuration hubs.
         
@@ -1298,44 +1300,81 @@ class Afterwork(commands.Cog, name="Afterwork"):
             await self.deploy_all(ctx)
 
     @afterwork_deploy_group.command(name="audio")
+    @commands.is_owner()
     async def afterwork_audio_deploy_cmd(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Audio."""
         await self.afterwork_audio_deploy(ctx)
 
     @afterwork_deploy_group.command(name="embed")
+    @commands.is_owner()
     async def afterwork_embed_deploy_cmd(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Embed."""
         await self.afterwork_embed_deploy(ctx)
 
     @afterwork_deploy_group.command(name="rss")
+    @commands.is_owner()
     async def afterwork_rss_deploy_cmd(self, ctx: commands.Context):
         """Deploys the persistent settings panel for RSS."""
         await self.afterwork_rss_deploy(ctx)
 
     @afterwork_deploy_group.command(name="tv")
+    @commands.is_owner()
     async def afterwork_tv_deploy_cmd(self, ctx: commands.Context):
         """Deploys the persistent settings panel for TV."""
         await self.afterwork_tv_deploy(ctx)
 
     @afterwork_deploy_group.command(name="voice")
+    @commands.is_owner()
     async def afterwork_voice_deploy_cmd(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Voice."""
         await self.afterwork_voice_deploy(ctx)
 
     @afterwork_deploy_group.command(name="hide")
+    @commands.is_owner()
     async def afterwork_hide_deploy_cmd(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Hide Category Visibility."""
         await self.afterwork_hide_deploy(ctx)
 
     @afterwork_deploy_group.command(name="member")
+    @commands.is_owner()
     async def afterwork_member_deploy_cmd(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Membership."""
         await self.afterwork_member_deploy(ctx)
 
     @afterwork_deploy_group.command(name="repost")
+    @commands.is_owner()
     async def afterwork_repost_deploy_cmd(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Website News & Events Reposter."""
         await self.afterwork_repost_deploy(ctx)
+
+
+    @afterwork_group.group(name="repost")
+    @commands.is_owner()
+    async def afterwork_repost_group(self, ctx: commands.Context):
+        """Manage the Website Reposter."""
+        pass
+
+    @afterwork_repost_group.command(name="rm")
+    @commands.is_owner()
+    async def afterwork_repost_rm(self, ctx: commands.Context, module_id: str):
+        """Removes a module from the Reposter."""
+        async with self.config.guild(ctx.guild).repost_channels() as channels:
+            mod_id = module_id.lower()
+            if mod_id in channels:
+                del channels[mod_id]
+                await ctx.send(f"✅ Removed `{mod_id}` from Reposter.")
+                
+                # Update embed if it exists
+                old_message_id = await self.config.guild(ctx.guild).repost_setup_message_id()
+                if old_message_id:
+                    try:
+                        old_message = await ctx.channel.fetch_message(old_message_id)
+                        embed = old_message.embeds[0]
+                        await _update_repost_setup_embed(self, ctx.guild, embed)
+                        await old_message.edit(embed=embed)
+                    except Exception: pass
+            else:
+                await ctx.send(f"❌ Module `{mod_id}` is not currently linked.")
 
     # --- RSS SUBCOMMAND GROUP ---
 
@@ -2436,32 +2475,40 @@ class RepostSetupView(discord.ui.View):
         await _send_owner_dm(self.cog.bot, f"User {interaction.user.display_name} attempted to use owner controls in {interaction.guild.name}.")
         return False
 
-    @discord.ui.button(label="Add Module Link", style=discord.ButtonStyle.primary, custom_id="repost_add_link", emoji="🔗")
+    @discord.ui.button(label="Target Channel", style=discord.ButtonStyle.primary, custom_id="repost_add_link")
     async def add_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(RepostAddLinkModal(self.cog, interaction.message))
         
-    @discord.ui.button(label="Clear Links", style=discord.ButtonStyle.danger, custom_id="repost_clear_links", emoji="🗑️")
-    async def clear_links_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.cog.config.guild(interaction.guild).repost_channels.set({})
+    @discord.ui.button(label="Enable / Disable", style=discord.ButtonStyle.secondary, custom_id="repost_toggle_enable")
+    async def toggle_enable_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        current = await self.cog.config.guild(interaction.guild).repost_enabled()
+        await self.cog.config.guild(interaction.guild).repost_enabled.set(not current)
+        
         embed = interaction.message.embeds[0]
-        embed.set_footer(text=_get_admin_footer(interaction, "Cleared all Repost Links"))
+        status = "Enabled" if not current else "Disabled"
+        embed.set_footer(text=_get_admin_footer(interaction, f"{status} Reposter"))
         await _update_repost_setup_embed(self.cog, interaction.guild, embed)
         await interaction.response.edit_message(embed=embed, view=self)
-        await interaction.followup.send("✅ All module links cleared.", ephemeral=True)
 
 async def _update_repost_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
     channels = await cog.config.guild(guild).repost_channels()
+    enabled = await cog.config.guild(guild).repost_enabled()
+    
     embed.title = "⚙️ Website News & Events Reposter Setup"
     embed.description = "Link website Modules to Discord Channels. When a new post is made on the website for a linked module, it will automatically be posted here."
     embed.color = discord.Color.gold()
     embed.clear_fields()
     
+    status_emoji = "🟢" if enabled else "🔴"
+    status_text = "Enabled" if enabled else "Disabled"
+    embed.add_field(name="Status", value=f"{status_emoji} **{status_text}**", inline=False)
+    
     if not channels:
-        embed.add_field(name="Linked Modules", value="None configured. Click 'Add Module Link' below.", inline=False)
+        embed.add_field(name="Linked Modules", value="None configured. Click 'Target Channel' below.", inline=False)
     else:
         text = ""
         for mod, chan_id in channels.items():
-            text += f"**{mod.upper()}** ➔ <#{chan_id}>\\n"
+            text += f"**{mod.upper()}** ➔ <#{chan_id}>\n"
         embed.add_field(name="Linked Modules", value=text, inline=False)
 
 # Add this method inside Afterwork class dynamically:
@@ -2492,7 +2539,8 @@ async def repost_polling_task(self):
                                 mod_id = n.get("module_id") or "global"
                                 mod_id = mod_id.lower()
                                 
-                                if mod_id in channels:
+                                enabled = await self.config.guild(guild).repost_enabled()
+                                if enabled and mod_id in channels:
                                     chan_id = channels[mod_id]
                                     channel = guild.get_channel(chan_id)
                                     if channel:
@@ -2535,7 +2583,8 @@ async def repost_polling_task(self):
                                 mod_id = e.get("module_id") or "global"
                                 mod_id = mod_id.lower()
                                 
-                                if mod_id in channels:
+                                enabled = await self.config.guild(guild).repost_enabled()
+                                if enabled and mod_id in channels:
                                     chan_id = channels[mod_id]
                                     channel = guild.get_channel(chan_id)
                                     if channel:
