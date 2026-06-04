@@ -1611,7 +1611,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
                     break
         except Exception: pass
 
-        async def afterwork_member_deploy(self, ctx: commands.Context):
+    async def afterwork_member_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Membership."""
         old_message_id = await self.config.guild(ctx.guild).member_setup_message_id()
         if old_message_id:
@@ -2461,8 +2461,7 @@ async def _update_repost_setup_embed(cog, guild: discord.Guild, embed: discord.E
     else:
         text = ""
         for mod, chan_id in channels.items():
-            text += f"**{mod.upper()}** ➔ <#{chan_id}>
-"
+            text += f"**{mod.upper()}** ➔ <#{chan_id}>\\n"
         embed.add_field(name="Linked Modules", value=text, inline=False)
 
 # Add this method inside Afterwork class dynamically:
