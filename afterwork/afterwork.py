@@ -1331,7 +1331,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
         """Deploys the persistent settings panel for Membership."""
         await self.afterwork_member_deploy(ctx)
 
-    @afterwork_deploy_group.command(name="news")
+    @afterwork_deploy_group.command(name="repost")
     async def afterwork_news_deploy_cmd(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Website News Auto-Poster."""
         await self.afterwork_news_deploy(ctx)
