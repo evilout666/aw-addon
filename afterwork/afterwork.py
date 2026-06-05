@@ -2193,6 +2193,11 @@ class Afterwork(commands.Cog, name="Afterwork"):
     async def on_message(self, message: discord.Message):
         if not message.guild: return
         
+        # 0. Delete pin system messages from the bot
+        if message.type == discord.MessageType.pins_add and message.author.id == self.bot.user.id:
+            try: await message.delete()
+            except Exception: pass
+        
         # 1. Process TV Sonarr/Radarr webhooks
         await self._process_tv_message(message)
         
@@ -2572,10 +2577,13 @@ async def discord_polling_task(self):
                                                     if not servers_to_include or s_name in servers_to_include:
                                                         state = s_data.get("State", 0)
                                                         status_emoji = "🟢" if state == 20 else "🔴"
+                                                        status_text = "Online" if state == 20 else "Offline"
                                                         metrics = s_data.get("Metrics", {})
                                                         players = metrics.get("ActiveUsers", 0)
                                                         max_players = metrics.get("MaxUsers", 0)
-                                                        discord_embed.add_field(name=f"{status_emoji} {s_name}", value=f"Players: {players}/{max_players}", inline=True)
+                                                        discord_embed.add_field(name=f"{s_name}", value=f"{status_emoji} {status_text}", inline=True)
+                                                        discord_embed.add_field(name="Players", value=f"{players}/{max_players}", inline=True)
+                                                        discord_embed.add_field(name="\u200b", value="\u200b", inline=True)
                                     except Exception as e:
                                         log.error(f"Error fetching status for embed: {e}")
 
