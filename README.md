@@ -38,7 +38,7 @@ The unified cog merges multiple distinct administrative sub-modules into one coh
 
 | Subsystem | Core Feature | Discord UI Components |
 |:---|:---|:---|
-| **Audio** | Pinned controls for Red's official Audio cog | Interactive play/pause, skip, volume slider, and custom playlist selector. |
+| **Audio** | Pinned controls for Red's official Audio cog | Interactive play/pause, skip, and volume slider. |
 | **Embed** | Secure custom JSON message publisher | Interactive JSON validator modal to send custom embeds to saved channels. |
 | **RSS** | Multi-feed background polling engine | Subscription control panel to add, remove, and route feeds every 5 minutes. |
 | **TV Webhooks** | Refined Sonarr/Radarr announcement feed | Formats raw webhook payloads into sleek announcements with metadata. |
