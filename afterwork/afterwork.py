@@ -230,23 +230,23 @@ class AudioPlayerView(discord.ui.View):
         if playlists:
             self.add_item(AudioPlayerPlaylistSelect(playlists, cog))
 
-        song_button = discord.ui.Button(label="Song", style=discord.ButtonStyle.primary, custom_id="player_song")
+        song_button = discord.ui.Button(label="Song", style=discord.ButtonStyle.secondary, custom_id="player_song")
         song_button.callback = self.on_song
         self.add_item(song_button)
 
         play_pause_button = discord.ui.Button(
             label="Pause" if is_playing else "Play",
-            style=discord.ButtonStyle.success,
+            style=discord.ButtonStyle.secondary,
             custom_id="player_pause_toggle"
         )
         play_pause_button.callback = self.on_play_pause
         self.add_item(play_pause_button)
 
-        skip_button = discord.ui.Button(label="Next", style=discord.ButtonStyle.success, custom_id="player_skip")
+        skip_button = discord.ui.Button(label="Next", style=discord.ButtonStyle.secondary, custom_id="player_skip")
         skip_button.callback = self.on_skip
         self.add_item(skip_button)
 
-        stop_button = discord.ui.Button(label="Stop", style=discord.ButtonStyle.danger, custom_id="player_stop")
+        stop_button = discord.ui.Button(label="Stop", style=discord.ButtonStyle.secondary, custom_id="player_stop")
         stop_button.callback = self.on_stop
         self.add_item(stop_button)
 
@@ -274,12 +274,12 @@ class AudioSettingsView(discord.ui.View):
         await _send_owner_dm(self.cog.bot, f"User {interaction.user.display_name} attempted to use owner controls in {interaction.guild.name}.")
         return False
 
-    @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="set_voice_channel")
+    @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.secondary, custom_id="set_voice_channel")
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(AudioSetVoiceChannelModal(self.cog))
 
 
-    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.grey, custom_id="toggle_automation")
+    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="toggle_automation")
     async def toggle_automation_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         current_state = await self.cog.config.guild(interaction.guild).audio_is_enabled()
         new_state = not current_state
@@ -389,12 +389,12 @@ class EmbedSetupView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.primary, custom_id="embed_set_channel", row=0)
+    @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.secondary, custom_id="embed_set_channel", row=0)
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
         await interaction.response.send_modal(EmbedNamedChannelSetModal(self.cog, interaction.message))
 
-    @discord.ui.button(label="Send Embed", style=discord.ButtonStyle.success, custom_id="embed_send_msg", row=0)
+    @discord.ui.button(label="Send Embed", style=discord.ButtonStyle.secondary, custom_id="embed_send_msg", row=0)
     async def send_embed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
         await interaction.response.send_modal(EmbedNamedMessageSendModal(self.cog, interaction.message))
@@ -459,7 +459,7 @@ class RssSetupView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Add Feed", style=discord.ButtonStyle.primary, custom_id="rss_add_feed_button", row=0)
+    @discord.ui.button(label="Add Feed", style=discord.ButtonStyle.secondary, custom_id="rss_add_feed_button", row=0)
     async def add_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
         await interaction.response.send_modal(RssAddFeedModal(self.cog, interaction.message))
@@ -564,7 +564,7 @@ class TvSetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    @discord.ui.button(label="Target Channel", style=discord.ButtonStyle.primary, custom_id="tv_set_target", row=0)
+    @discord.ui.button(label="Target Channel", style=discord.ButtonStyle.secondary, custom_id="tv_set_target", row=0)
     async def set_target_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user):
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
@@ -643,7 +643,7 @@ class VoiceSetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="voice_set_button", row=0)
+    @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.secondary, custom_id="voice_set_button", row=0)
     async def set_source_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user):
             await _send_owner_dm(self.cog.bot, f"Guild: {interaction.guild.name}. Unauthorized access: User {interaction.user.display_name} attempted to use owner controls.")
@@ -679,8 +679,8 @@ class VoiceChannelButtons(discord.ui.View):
         self.voice_channel = voice_channel
         self.selected_member_id = None
         self.member_select = discord.ui.Select(placeholder="Select a member to manage...", custom_id="voice_member_select", options=[discord.SelectOption(label="Refreshing...", value="none")])
-        self.kick_button = discord.ui.Button(label="Kick", style=discord.ButtonStyle.danger, custom_id="voice_kick", disabled=True)
-        self.transfer_button = discord.ui.Button(label="Transfer", style=discord.ButtonStyle.blurple, custom_id="voice_transfer", disabled=True)
+        self.kick_button = discord.ui.Button(label="Kick", style=discord.ButtonStyle.secondary, custom_id="voice_kick", disabled=True)
+        self.transfer_button = discord.ui.Button(label="Transfer", style=discord.ButtonStyle.secondary, custom_id="voice_transfer", disabled=True)
         self.refresh_button = discord.ui.Button(label="Refresh", style=discord.ButtonStyle.secondary, custom_id="voice_refresh")
         self.privacy_button = discord.ui.Button(label="Make Private", style=discord.ButtonStyle.secondary, custom_id="voice_privacy_toggle")
         
@@ -862,7 +862,7 @@ class HideSetupView(discord.ui.View):
         self.toggle_visibility_action.label = "Show" if initial_hidden else "Hide"
         self.toggle_visibility_action.style = discord.ButtonStyle.success if initial_hidden else discord.ButtonStyle.danger
 
-    @discord.ui.button(label="Category ID", style=discord.ButtonStyle.primary, custom_id="hide_set_category_button", row=0)
+    @discord.ui.button(label="Category ID", style=discord.ButtonStyle.secondary, custom_id="hide_set_category_button", row=0)
     async def set_category_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): 
             return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
@@ -1410,7 +1410,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
         playlist_display = "\n".join(f"• {name}" for name in playlists.keys()) or "*None*"
 
         embed = discord.Embed(
-            title="⚙️ Audio Setup",
+            title="Audio Setup",
             description="Use this panel to set the music channel and manage playlists.",
             color=discord.Color.purple()
         )
@@ -1454,7 +1454,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 await old_message.delete()
             except discord.HTTPException: pass
             
-        initial_embed = discord.Embed(title="⚙️ RSS Feed Setup", description="Loading...", color=discord.Color.purple())
+        initial_embed = discord.Embed(title="RSS Feed Setup", description="Loading...", color=discord.Color.purple())
         initial_embed = await _update_rss_setup_embed(self, ctx.guild, initial_embed)
         initial_embed.set_footer(text=_get_admin_footer(ctx, "Configuration Hub Deployed"))
         initial_enabled = await self.config.guild(ctx.guild).rss_enabled()
@@ -1484,7 +1484,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 await old_message.delete()
             except discord.HTTPException: pass
 
-        initial_embed = discord.Embed(title="⚙️ Radarr and Sonarr Setup", description="Loading...", color=discord.Color.purple())
+        initial_embed = discord.Embed(title="Radarr and Sonarr Setup", description="Loading...", color=discord.Color.purple())
         initial_embed.set_footer(text=_get_admin_footer(ctx, "Configuration Hub Deployed"))
         initial_embed = await _update_tv_setup_embed(self, ctx.guild, initial_embed)
         initial_enabled = await self.config.guild(ctx.guild).tv_enabled()
@@ -1514,7 +1514,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 await old_message.delete()
             except discord.HTTPException: pass
 
-        initial_embed = discord.Embed(title="⚙️ Voice Channel Setup", description="Loading...", color=discord.Color.purple())
+        initial_embed = discord.Embed(title="Voice Channel Setup", description="Loading...", color=discord.Color.purple())
         initial_embed = await _update_voice_setup_embed(self, ctx.guild, initial_embed)
         initial_enabled = await self.config.guild(ctx.guild).voice_enabled()
         
@@ -1543,7 +1543,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 await old_message.delete()
             except Exception: pass
 
-        embed = discord.Embed(title="⚙️ Member Application Setup", description="Loading...", color=discord.Color.purple())
+        embed = discord.Embed(title="Member Application Setup", description="Loading...", color=discord.Color.purple())
         await _update_member_setup_embed(self, ctx.guild, embed)
         
         msg = await ctx.send(embed=embed, view=MemberSetupView(self))
@@ -1578,7 +1578,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
             "This tool manages the visibility of channels within a configured category. "
             "Hidden from roles with Administrator or Manage Channels permissions."
         )
-        initial_embed = discord.Embed(title="⚙️ Hidden Channel Setup", description=description, color=discord.Color.purple())
+        initial_embed = discord.Embed(title="Hidden Channel Setup", description=description, color=discord.Color.purple())
         initial_embed = await _update_hide_setup_embed(self, ctx.guild, initial_embed)
         initial_embed.set_footer(text=_get_admin_footer(ctx, "Configuration Hub Deployed"))
         
@@ -2220,7 +2220,7 @@ class MemberApplyView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
 
-    @discord.ui.button(label="Apply for Membership", style=discord.ButtonStyle.success, custom_id="member_apply_btn", emoji="📝")
+    @discord.ui.button(label="Apply for Membership", style=discord.ButtonStyle.secondary, custom_id="member_apply_btn", emoji="📝")
     async def apply_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(MemberApplyModal(self.cog))
 
@@ -2311,7 +2311,7 @@ class MemberSetupView(discord.ui.View):
     async def set_dune_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(MemberSetRoleModal(self.cog, interaction.message, 'dune'))
 
-    @discord.ui.button(label="Drop Apply Panel Here", style=discord.ButtonStyle.primary, custom_id="member_deploy_panel")
+    @discord.ui.button(label="Drop Apply Panel Here", style=discord.ButtonStyle.secondary, custom_id="member_deploy_panel")
     async def deploy_panel_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(MemberDeployPanelModal(self.cog, interaction.message))
 
@@ -2378,7 +2378,7 @@ class RepostSetupView(discord.ui.View):
         await _send_owner_dm(self.cog.bot, f"User {interaction.user.display_name} attempted to use owner controls in {interaction.guild.name}.")
         return False
 
-    @discord.ui.button(label="Target Channel", style=discord.ButtonStyle.primary, custom_id="repost_add_link")
+    @discord.ui.button(label="Target Channel", style=discord.ButtonStyle.secondary, custom_id="repost_add_link")
     async def add_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(RepostAddLinkModal(self.cog, interaction.message))
         
@@ -2557,7 +2557,7 @@ class DiscordChannelModal(discord.ui.Modal, title="Add Discord Embed Channel"):
         async with self.cog.config.guild(interaction.guild).discord_channels() as channels:
             channels[mod_id] = chan_id
             
-        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed(title="⚙️ Discord Embed Setup")
+        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed(title="Manage Discord Setup")
         await _update_discord_setup_embed(self.cog, interaction.guild, embed)
         await interaction.message.edit(embed=embed)
         await interaction.response.send_message(f"✅ Set {mod_id} to post to <#{chan_id}>.", ephemeral=True)
@@ -2593,11 +2593,11 @@ class DiscordSetupView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
 
-    @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.primary, custom_id="discord_add_link")
+    @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.secondary, custom_id="discord_add_link")
     async def add_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(DiscordChannelModal(self.cog))
 
-    @discord.ui.button(label="Remove Channel", style=discord.ButtonStyle.danger, custom_id="discord_remove_link")
+    @discord.ui.button(label="Remove Channel", style=discord.ButtonStyle.secondary, custom_id="discord_remove_link")
     async def remove_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         channels = await self.cog.config.guild(interaction.guild).discord_channels()
         if not channels:
@@ -2619,7 +2619,7 @@ class DiscordSetupView(discord.ui.View):
         current = await self.cog.config.guild(interaction.guild).discord_enabled()
         await self.cog.config.guild(interaction.guild).discord_enabled.set(not current)
         
-        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed(title="⚙️ Discord Embed Setup")
+        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed(title="Manage Discord Setup")
         await _update_discord_setup_embed(self.cog, interaction.guild, embed)
         await interaction.response.edit_message(embed=embed)
 
