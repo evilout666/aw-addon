@@ -1368,13 +1368,11 @@ class Afterwork(commands.Cog, name="Afterwork"):
         
         subcommands = [
             self.afterwork_audio_deploy,
-            self.afterwork_embed_deploy,
             self.afterwork_rss_deploy,
             self.afterwork_tv_deploy,
             self.afterwork_voice_deploy,
             self.afterwork_hide_deploy,
             self.afterwork_member_deploy,
-            self.afterwork_repost_deploy,
             self.afterwork_discord_deploy
         ]
         
@@ -1412,9 +1410,9 @@ class Afterwork(commands.Cog, name="Afterwork"):
         playlist_display = "\n".join(f"• {name}" for name in playlists.keys()) or "*None*"
 
         embed = discord.Embed(
-            title="Music Channel Control",
+            title="⚙️ Audio Setup",
             description="Use this panel to set the music channel and manage playlists.",
-            color=await ctx.embed_color()
+            color=discord.Color.purple()
         )
         embed.add_field(name="System Status", value=status_display, inline=False)
         embed.add_field(name="Music Channel", value=vc_display, inline=False)
@@ -1447,35 +1445,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
                     break
         except Exception: pass
 
-    async def afterwork_embed_deploy(self, ctx: commands.Context):
-        """Deploys the persistent settings panel for Embed."""
-        old_message_id = await self.config.guild(ctx.guild).embed_setup_message_id()
-        if old_message_id:
-            try:
-                old_message = await ctx.channel.fetch_message(old_message_id)
-                await old_message.delete()
-            except discord.HTTPException: pass
-
-        initial_embed = discord.Embed(title="Custom Embed Sender", color=discord.Color.blue())
-        initial_embed = await _update_embed_setup_embed(self, ctx.guild, initial_embed)
-        initial_embed.set_footer(text=_get_admin_footer(ctx, "Configuration Hub Deployed"))
-
-        view = EmbedSetupView(self)
-        sent_message = await ctx.send(embed=initial_embed, view=view)
-        
-        await sent_message.pin(reason="Afterwork Embed Configuration Hub.")
-        await self.config.guild(ctx.guild).embed_setup_message_id.set(sent_message.id)
-        
-        try: await ctx.message.delete()
-        except discord.HTTPException: pass
-        await asyncio.sleep(1)
-        try:
-            async for message in ctx.channel.history(limit=5):
-                if message.type == discord.MessageType.pins_add and message.author.id == self.bot.user.id:
-                    await message.delete()
-                    break
-        except Exception: pass
-
     async def afterwork_rss_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for RSS."""
         old_message_id = await self.config.guild(ctx.guild).rss_setup_message_id()
@@ -1485,7 +1454,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 await old_message.delete()
             except discord.HTTPException: pass
             
-        initial_embed = discord.Embed(title="RSS Feed Control", color=discord.Color.blue())
+        initial_embed = discord.Embed(title="⚙️ RSS Feed Setup", description="Loading...", color=discord.Color.purple())
         initial_embed = await _update_rss_setup_embed(self, ctx.guild, initial_embed)
         initial_embed.set_footer(text=_get_admin_footer(ctx, "Configuration Hub Deployed"))
         initial_enabled = await self.config.guild(ctx.guild).rss_enabled()
@@ -1515,7 +1484,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 await old_message.delete()
             except discord.HTTPException: pass
 
-        initial_embed = discord.Embed(title="Radarr and Sonarr", color=discord.Color.blue())
+        initial_embed = discord.Embed(title="⚙️ Radarr and Sonarr Setup", description="Loading...", color=discord.Color.purple())
         initial_embed.set_footer(text=_get_admin_footer(ctx, "Configuration Hub Deployed"))
         initial_embed = await _update_tv_setup_embed(self, ctx.guild, initial_embed)
         initial_enabled = await self.config.guild(ctx.guild).tv_enabled()
@@ -1545,7 +1514,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 await old_message.delete()
             except discord.HTTPException: pass
 
-        initial_embed = discord.Embed(title="Voice Channel Control", color=discord.Color.blue())
+        initial_embed = discord.Embed(title="⚙️ Voice Channel Setup", description="Loading...", color=discord.Color.purple())
         initial_embed = await _update_voice_setup_embed(self, ctx.guild, initial_embed)
         initial_enabled = await self.config.guild(ctx.guild).voice_enabled()
         
@@ -1574,26 +1543,11 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 await old_message.delete()
             except Exception: pass
 
-        embed = discord.Embed(title="⚙️ Member Application Setup", description="Loading...", color=discord.Color.blue())
+        embed = discord.Embed(title="⚙️ Member Application Setup", description="Loading...", color=discord.Color.purple())
         await _update_member_setup_embed(self, ctx.guild, embed)
         
         msg = await ctx.send(embed=embed, view=MemberSetupView(self))
         await self.config.guild(ctx.guild).member_setup_message_id.set(msg.id)
-
-    async def afterwork_repost_deploy(self, ctx: commands.Context):
-        """Deploys the persistent settings panel for News & Events Reposter."""
-        old_message_id = await self.config.guild(ctx.guild).repost_setup_message_id()
-        if old_message_id:
-            try:
-                old_message = await ctx.channel.fetch_message(old_message_id)
-                await old_message.delete()
-            except Exception: pass
-
-        embed = discord.Embed(title="⚙️ Website Reposter Setup", description="Loading...", color=discord.Color.gold())
-        await _update_repost_setup_embed(self, ctx.guild, embed)
-        
-        msg = await ctx.send(embed=embed, view=RepostSetupView(self))
-        await self.config.guild(ctx.guild).repost_setup_message_id.set(msg.id)
 
     async def afterwork_discord_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Discord Embed Manager."""
@@ -1624,7 +1578,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
             "This tool manages the visibility of channels within a configured category. "
             "Hidden from roles with Administrator or Manage Channels permissions."
         )
-        initial_embed = discord.Embed(title="Hidden Channel", description=description, color=discord.Color.blue())
+        initial_embed = discord.Embed(title="⚙️ Hidden Channel Setup", description=description, color=discord.Color.purple())
         initial_embed = await _update_hide_setup_embed(self, ctx.guild, initial_embed)
         initial_embed.set_footer(text=_get_admin_footer(ctx, "Configuration Hub Deployed"))
         
