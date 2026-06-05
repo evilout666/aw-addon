@@ -1275,58 +1275,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
         """List all available subcommands for Afterwork."""
         await ctx.send_help(self.afterwork_group)
 
-    @afterwork_group.command(name="embed")
-    async def afterwork_embed_cmd(self, ctx: commands.Context, channel_name: str, *, json_payload: str):
-        """Send a custom JSON embed to a named channel or a specific channel (ID/Mention)."""
-        channel_name = channel_name.strip().lower()
-        named_channels = await self.config.guild(ctx.guild).embed_named_channels()
-        channel_id = named_channels.get(channel_name)
-        
-        channel = None
-        if channel_id:
-            channel = ctx.guild.get_channel(channel_id)
-        else:
-            # Try to resolve as channel mention or ID
-            try:
-                channel = await commands.TextChannelConverter().convert(ctx, channel_name)
-            except commands.BadArgument:
-                try:
-                    channel = await commands.ThreadConverter().convert(ctx, channel_name)
-                except commands.BadArgument:
-                    pass
-
-        if not channel:
-            return await ctx.send(f"❌ **Error:** Target channel or saved channel '{channel_name}' not found.")
-            
-        try:
-            data = json.loads(json_payload)
-        except json.JSONDecodeError as e:
-            return await ctx.send(f"❌ **Error Parsing JSON:** `{e.msg}`")
-            
-        embed = discord.Embed()
-        if "title" in data: embed.title = data["title"]
-        if "description" in data: embed.description = data["description"]
-        if "color" in data:
-            try: embed.color = discord.Color(int(str(data["color"]), 16))
-            except ValueError: embed.color = discord.Color.blue()
-        else:
-            embed.color = discord.Color.blue()
-            
-        if "fields" in data and isinstance(data["fields"], list):
-            for field in data["fields"]:
-                embed.add_field(name=field.get("name", "Field"), value=field.get("value", "..."), inline=field.get("inline", False))
-                
-        if "thumbnail" in data: embed.set_thumbnail(url=data["thumbnail"])
-        if "image" in data: embed.set_image(url=data["image"])
-        
-        embed.set_footer(text="e.Network | Official Announcement")
-        
-        try:
-            await channel.send(embed=embed)
-            await ctx.tick()
-        except discord.Forbidden:
-            await ctx.send("❌ **Error:** Lacking permission to send messages in target channel.")
-
     # --- DEPLOY SUBCOMMAND GROUP ---
 
     @afterwork_group.group(name="deploy", invoke_without_command=True)
@@ -1344,12 +1292,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
     async def afterwork_audio_deploy_cmd(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Audio."""
         await self.afterwork_audio_deploy(ctx)
-
-    @afterwork_deploy_group.command(name="embed")
-    @commands.is_owner()
-    async def afterwork_embed_deploy_cmd(self, ctx: commands.Context):
-        """Deploys the persistent settings panel for Embed."""
-        await self.afterwork_embed_deploy(ctx)
 
     @afterwork_deploy_group.command(name="rss")
     @commands.is_owner()
@@ -1381,46 +1323,12 @@ class Afterwork(commands.Cog, name="Afterwork"):
         """Deploys the persistent settings panel for Membership."""
         await self.afterwork_member_deploy(ctx)
 
-    @afterwork_deploy_group.command(name="repost")
-    @commands.is_owner()
-    async def afterwork_repost_deploy_cmd(self, ctx: commands.Context):
-        """Deploys the persistent settings panel for Website News & Events Reposter."""
-        await self.afterwork_repost_deploy(ctx)
-
     @afterwork_deploy_group.command(name="discord")
     @commands.is_owner()
     async def afterwork_discord_deploy_cmd(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Discord Embed Manager."""
         await self.afterwork_discord_deploy(ctx)
 
-
-    @afterwork_group.group(name="repost")
-    @commands.is_owner()
-    async def afterwork_repost_group(self, ctx: commands.Context):
-        """Manage the Website Reposter."""
-        pass
-
-    @afterwork_repost_group.command(name="rm")
-    @commands.is_owner()
-    async def afterwork_repost_rm(self, ctx: commands.Context, module_id: str):
-        """Removes a module from the Reposter."""
-        async with self.config.guild(ctx.guild).repost_channels() as channels:
-            mod_id = module_id.lower()
-            if mod_id in channels:
-                del channels[mod_id]
-                await ctx.send(f"✅ Removed `{mod_id}` from Reposter.")
-                
-                # Update embed if it exists
-                old_message_id = await self.config.guild(ctx.guild).repost_setup_message_id()
-                if old_message_id:
-                    try:
-                        old_message = await ctx.channel.fetch_message(old_message_id)
-                        embed = old_message.embeds[0]
-                        await _update_repost_setup_embed(self, ctx.guild, embed)
-                        await old_message.edit(embed=embed)
-                    except Exception: pass
-            else:
-                await ctx.send(f"❌ Module `{mod_id}` is not currently linked.")
 
     # --- RSS SUBCOMMAND GROUP ---
 
