@@ -459,12 +459,12 @@ class RssSetupView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Add Feed", style=discord.ButtonStyle.secondary, custom_id="rss_add_feed_button", row=0)
+    @discord.ui.button(label="Feed", style=discord.ButtonStyle.secondary, custom_id="rss_add_feed_button", row=0)
     async def add_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
         await interaction.response.send_modal(RssAddFeedModal(self.cog, interaction.message))
 
-    @discord.ui.button(label="Remove Feed (Command)", style=discord.ButtonStyle.secondary, custom_id="rss_remove_feed_button", row=0, disabled=True)
+    @discord.ui.button(label="Remove", style=discord.ButtonStyle.danger, custom_id="rss_remove_feed_button", row=0, disabled=True)
     async def remove_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
         await interaction.response.send_message("Please use the command `[p]afterwork rss remove <name>` to remove a feed.", ephemeral=True)
@@ -556,7 +556,7 @@ class TvSetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    @discord.ui.button(label="Target Channel", style=discord.ButtonStyle.primary, custom_id="tv_set_target", row=0)
+    @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.primary, custom_id="tv_set_target", row=0)
     async def set_target_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user):
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
@@ -1009,7 +1009,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 self.bot.add_view(RepostSetupView(self), message_id=data['repost_setup_message_id'])
 
             if data.get('discord_setup_message_id'):
-                self.bot.add_view(DiscordSetupView(self), message_id=data['discord_setup_message_id'])
+                self.bot.add_view(DiscordSetupView(self, initial_enabled=data.get('discord_enabled', False)), message_id=data['discord_setup_message_id'])
 
         self.start_background_loop()
         await self.start_web_server()
@@ -1600,7 +1600,11 @@ class Afterwork(commands.Cog, name="Afterwork"):
         embed = discord.Embed(title="Discord Embed Manager Setup", description="Loading...", color=discord.Color.purple())
         await _update_discord_setup_embed(self, ctx.guild, embed)
         
-        msg = await ctx.send(embed=embed, view=DiscordSetupView(self))
+        enabled = await self.config.guild(ctx.guild).discord_enabled()
+        msg = await ctx.send(embed=embed, view=DiscordSetupView(self, initial_enabled=enabled))
+        try:
+            await msg.pin()
+        except Exception: pass
         await self.config.guild(ctx.guild).discord_setup_message_id.set(msg.id)
 
     async def afterwork_hide_deploy(self, ctx: commands.Context):
@@ -2464,9 +2468,11 @@ class DiscordChannelRemoveModal(discord.ui.Modal, title="Remove Target Channel")
         await interaction.response.send_message(msg, ephemeral=True)
 
 class DiscordSetupView(discord.ui.View):
-    def __init__(self, cog):
+    def __init__(self, cog, initial_enabled: bool = False):
         super().__init__(timeout=None)
         self.cog = cog
+        self.toggle_enable_btn.label = "Disable" if initial_enabled else "Enable"
+        self.toggle_enable_btn.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
     @discord.ui.button(label="Channel", style=discord.ButtonStyle.primary, custom_id="discord_add_link")
     async def add_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -2484,8 +2490,9 @@ class DiscordSetupView(discord.ui.View):
         
         embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed(title="Discord Embed Manager Setup")
         await _update_discord_setup_embed(self.cog, interaction.guild, embed)
-        await interaction.message.edit(embed=embed)
-        await interaction.response.send_message(f"Status toggled to {'Active' if new_state else 'Inactive'}.", ephemeral=True)
+        
+        view = DiscordSetupView(self.cog, initial_enabled=new_state)
+        await interaction.response.edit_message(embed=embed, view=view)
 
 async def _update_discord_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
     channels = await cog.config.guild(guild).discord_channels()
