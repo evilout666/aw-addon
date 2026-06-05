@@ -1411,6 +1411,15 @@ class Afterwork(commands.Cog, name="Afterwork"):
         await self.config.guild(ctx.guild).member_dune_role_id.set(None)
         await ctx.send("✅ Member Application configuration has been fully reset.")
 
+    @commands.command(name="awdebug", hidden=True)
+    @commands.is_owner()
+    async def aw_debug(self, ctx: commands.Context):
+        d_channels = await self.config.guild(ctx.guild).discord_channels()
+        r_channels = await self.config.guild(ctx.guild).repost_channels()
+        seen = await self.config.guild(ctx.guild).discord_last_embeds_ids()
+        msg = f"Discord Channels: {d_channels}\nRepost Channels: {r_channels}\nSeen Embeds: {seen}"
+        await ctx.send(f"```json\n{msg}\n```")
+
     # === Main Deploy All Command ===
     async def deploy_all(self, ctx: commands.Context):
         """Deploys all configuration hubs sequentially in the channel."""
@@ -2601,7 +2610,7 @@ async def discord_polling_task(self):
                                         if emb.get("pin_message"):
                                             try: await msg.pin()
                                             except: pass
-                                    except Exception: pass
+                                    except Exception as e: log.error(f'Failed to send embed for ID {eid}: {e}')
 
                 # 2. Fetch News from API
                 async with session.get("https://afterworkplay.com/api/db/news") as resp:
@@ -2647,7 +2656,7 @@ async def discord_polling_task(self):
                                         msg = await channel.send(embed=discord_embed)
                                         seen_ids[eid] = str(msg.id)
                                         await self.config.guild(guild).discord_last_news_ids.set(seen_ids)
-                                    except Exception: pass
+                                    except Exception as e: log.error(f'Failed to send embed for ID {eid}: {e}')
 
                 # 3. Fetch Events from API
                 async with session.get("https://afterworkplay.com/api/db/events") as resp:
@@ -2691,7 +2700,7 @@ async def discord_polling_task(self):
                                         msg = await channel.send(embed=discord_embed)
                                         seen_ids[eid] = str(msg.id)
                                         await self.config.guild(guild).discord_last_events_ids.set(seen_ids)
-                                    except Exception: pass
+                                    except Exception as e: log.error(f'Failed to send embed for ID {eid}: {e}')
 
         except Exception as e:
             log.error(f"Error in discord polling task: {e}")
