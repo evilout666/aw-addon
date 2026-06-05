@@ -1358,6 +1358,59 @@ class Afterwork(commands.Cog, name="Afterwork"):
         await self.config.guild(ctx.guild).audio_is_enabled.set(False)
         await ctx.send("✅ Audio configuration has been fully reset (playlists and channel bindings cleared).")
 
+
+    @afterwork_reset_group.command(name="rss")
+    async def afterwork_reset_rss_cmd(self, ctx: commands.Context):
+        """Clears all RSS settings."""
+        await self.config.guild(ctx.guild).rss_feeds.set([])
+        await self.config.guild(ctx.guild).rss_enabled.set(False)
+        await ctx.send("✅ RSS configuration has been fully reset.")
+
+    @afterwork_reset_group.command(name="tv")
+    async def afterwork_reset_tv_cmd(self, ctx: commands.Context):
+        """Clears all TV (Radarr/Sonarr) settings."""
+        await self.config.guild(ctx.guild).tv_dest_channel.set(None)
+        await self.config.guild(ctx.guild).tv_radarr_webhook_id.set(None)
+        await self.config.guild(ctx.guild).tv_sonarr_webhook_id.set(None)
+        await self.config.guild(ctx.guild).tv_enabled.set(False)
+        await ctx.send("✅ TV configuration has been fully reset.")
+
+    @afterwork_reset_group.command(name="voice")
+    async def afterwork_reset_voice_cmd(self, ctx: commands.Context):
+        """Clears all Voice Channel settings."""
+        await self.config.guild(ctx.guild).voice_source_id.set(None)
+        await self.config.guild(ctx.guild).voice_category_id.set(None)
+        await self.config.guild(ctx.guild).voice_enabled.set(False)
+        await ctx.send("✅ Voice Channel configuration has been fully reset.")
+
+    @afterwork_reset_group.command(name="hide")
+    async def afterwork_reset_hide_cmd(self, ctx: commands.Context):
+        """Clears all Hidden Category settings."""
+        await self.config.guild(ctx.guild).hide_category_id.set(None)
+        await self.config.guild(ctx.guild).hide_auto_hide_enabled.set(False)
+        await ctx.send("✅ Hidden Category configuration has been fully reset.")
+
+    @afterwork_reset_group.command(name="discord")
+    async def afterwork_reset_discord_cmd(self, ctx: commands.Context):
+        """Clears all Discord Embed Manager settings."""
+        await self.config.guild(ctx.guild).discord_channels.set({})
+        await self.config.guild(ctx.guild).discord_enabled.set(False)
+        await ctx.send("✅ Discord Embed Manager configuration has been fully reset.")
+
+    @afterwork_reset_group.command(name="repost")
+    async def afterwork_reset_repost_cmd(self, ctx: commands.Context):
+        """Clears all Reposter settings."""
+        await self.config.guild(ctx.guild).repost_channels.set({})
+        await self.config.guild(ctx.guild).repost_enabled.set(False)
+        await ctx.send("✅ Reposter configuration has been fully reset.")
+
+    @afterwork_reset_group.command(name="member")
+    async def afterwork_reset_member_cmd(self, ctx: commands.Context):
+        """Clears all Member Application settings."""
+        await self.config.guild(ctx.guild).member_ark_role_id.set(None)
+        await self.config.guild(ctx.guild).member_dune_role_id.set(None)
+        await ctx.send("✅ Member Application configuration has been fully reset.")
+
     # === Main Deploy All Command ===
     async def deploy_all(self, ctx: commands.Context):
         """Deploys all configuration hubs sequentially in the channel."""
@@ -2387,69 +2440,52 @@ class DiscordChannelModal(discord.ui.Modal, title="Add Discord Embed Channel"):
         await interaction.message.edit(embed=embed)
         await interaction.response.send_message(f"✅ Set {mod_id} to post to <#{chan_id}>.", ephemeral=True)
 
-class DiscordRemoveSelect(discord.ui.Select):
-    def __init__(self, options):
-        super().__init__(placeholder="Select a module channel to remove...", min_values=1, max_values=1, options=options)
 
-    async def callback(self, interaction: discord.Interaction):
-        mod_id = self.values[0]
-        async with self.view.cog.config.guild(interaction.guild).discord_channels() as channels:
+class DiscordChannelRemoveModal(discord.ui.Modal, title="Remove Target Channel"):
+    module_id = discord.ui.TextInput(label="Module Name (e.g. dune)", style=discord.TextStyle.short, required=True, max_length=50)
+
+    def __init__(self, cog, original_message):
+        super().__init__()
+        self.cog = cog
+        self.original_message = original_message
+
+    async def on_submit(self, interaction: discord.Interaction):
+        mod_id = self.module_id.value.strip().lower()
+        async with self.cog.config.guild(interaction.guild).discord_channels() as channels:
             if mod_id in channels:
                 del channels[mod_id]
+                msg = f"✅ Removed {mod_id} target."
+            else:
+                msg = f"❌ Target {mod_id} not found."
                 
-        embed = interaction.message.embeds[0]
-        await _update_discord_setup_embed(self.view.cog, interaction.guild, embed)
-        await interaction.message.edit(embed=embed)
-        await interaction.response.send_message(f"✅ Removed {mod_id} target.", ephemeral=True)
-
-class DiscordRemoveView(discord.ui.View):
-    def __init__(self, cog, interaction):
-        super().__init__(timeout=60)
-        self.cog = cog
-        self.original_interaction = interaction
-
-    async def on_timeout(self):
-        try:
-            await self.original_interaction.edit_original_response(view=None)
-        except: pass
+        embed = self.original_message.embeds[0]
+        await _update_discord_setup_embed(self.cog, interaction.guild, embed)
+        await self.original_message.edit(embed=embed)
+        await interaction.response.send_message(msg, ephemeral=True)
 
 class DiscordSetupView(discord.ui.View):
     def __init__(self, cog):
         super().__init__(timeout=None)
         self.cog = cog
 
-    @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.primary, custom_id="discord_add_link")
+    @discord.ui.button(label="Channel", style=discord.ButtonStyle.primary, custom_id="discord_add_link")
     async def add_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(DiscordChannelModal(self.cog))
 
-    @discord.ui.button(label="Remove Channel", style=discord.ButtonStyle.secondary, custom_id="discord_remove_link")
+    @discord.ui.button(label="Remove", style=discord.ButtonStyle.danger, custom_id="discord_remove_link")
     async def remove_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        channels = await self.cog.config.guild(interaction.guild).discord_channels()
-        if not channels:
-            return await interaction.response.send_message("❌ No targets set up yet.", ephemeral=True)
-            
-        options = [
-            discord.SelectOption(label=f"Module: {m}", description=f"Channel: {c}", value=m)
-            for m, c in channels.items()
-        ]
-        
-        view = DiscordRemoveView(self.cog, interaction)
-        select = DiscordRemoveSelect(options)
-        view.add_item(select)
-        
-        await interaction.response.send_message("Select a target to remove:", view=view, ephemeral=True)
+        await interaction.response.send_modal(DiscordChannelRemoveModal(self.cog, interaction.message))
 
-    @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.success, custom_id="discord_toggle_enable")
+    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="discord_toggle_enable")
     async def toggle_enable_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         current = await self.cog.config.guild(interaction.guild).discord_enabled()
         new_state = not current
         await self.cog.config.guild(interaction.guild).discord_enabled.set(new_state)
         
-        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed(title="Manage Discord Setup")
+        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed(title="Discord Embed Manager Setup")
         await _update_discord_setup_embed(self.cog, interaction.guild, embed)
-        view = DiscordSetupView(self.cog, initial_enabled=new_state)
-        await interaction.response.edit_message(embed=embed, view=view)
-
+        await interaction.message.edit(embed=embed)
+        await interaction.response.send_message(f"Status toggled to {'Active' if new_state else 'Inactive'}.", ephemeral=True)
 
 async def _update_discord_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
     channels = await cog.config.guild(guild).discord_channels()
@@ -2458,7 +2494,7 @@ async def _update_discord_setup_embed(cog, guild: discord.Guild, embed: discord.
     embed.description = "Manage dynamic custom embeds sent from the Web Dashboard."
     embed.clear_fields()
     
-    status_str = "✅ **Enabled**" if enabled else "❌ **Disabled**"
+    status_str = "🟢 Active" if enabled else "🔴 Inactive"
     embed.add_field(name="Status", value=status_str, inline=False)
     
     if channels:
