@@ -2836,19 +2836,31 @@ async def discord_polling_task(self):
                                                         servers_to_include = json.loads(emb.get("status_servers"))
                                                 except: pass
                                                 
-                                                for node, srvs in st_data.get("amp_nodes", {}).items():
-                                                    for s_name, s_data in srvs.items():
-                                                        if not servers_to_include or s_name in servers_to_include:
-                                                            state = s_data.get("State", 0)
-                                                            status_emoji = "🟢" if state == 20 else "🔴"
-                                                            metrics = s_data.get("Metrics", {})
-                                                            players = metrics.get("ActiveUsers", 0)
-                                                            max_players = metrics.get("MaxUsers", 0)
-                                                            discord_embed.add_field(
-                                                                name=f"{status_emoji} {s_name}",
-                                                                value=f"Players: {players}/{max_players}",
-                                                                inline=True
-                                                            )
+                                                raw_servers = st_data
+                                                server_list = raw_servers if isinstance(raw_servers, list) else (raw_servers.get("instances") or raw_servers.get("Instances") or raw_servers.get("Result") or raw_servers.get("result") or [])
+                                                flat_servers = []
+                                                if isinstance(server_list, list):
+                                                    if len(server_list) > 0 and isinstance(server_list[0], dict) and "AvailableInstances" in server_list[0]:
+                                                        for t in server_list:
+                                                            if t.get("AvailableInstances"):
+                                                                flat_servers.extend(t["AvailableInstances"])
+                                                    else:
+                                                        flat_servers = server_list
+                                                        
+                                                for s_data in flat_servers:
+                                                    if not isinstance(s_data, dict): continue
+                                                    s_name = s_data.get("InstanceName", "Unknown")
+                                                    if not servers_to_include or s_name in servers_to_include:
+                                                        state = s_data.get("State", 0)
+                                                        status_emoji = "🟢" if state == 20 else "🔴"
+                                                        metrics = s_data.get("Metrics", {})
+                                                        players = metrics.get("ActiveUsers", 0)
+                                                        max_players = metrics.get("MaxUsers", 0)
+                                                        discord_embed.add_field(
+                                                            name=f"{status_emoji} {s_name}",
+                                                            value=f"Players: {players}/{max_players}",
+                                                            inline=True
+                                                        )
                                     except Exception as e:
                                         log.error(f"Error fetching status for embed: {e}")
 
