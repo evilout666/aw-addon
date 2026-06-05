@@ -983,6 +983,11 @@ class Afterwork(commands.Cog, name="Afterwork"):
             repost_channels={},
             repost_last_news_id=0,
             repost_last_events_id=0,
+            # Discord
+            discord_setup_message_id=None,
+            discord_enabled=True,
+            discord_channels={},
+            discord_last_embeds_ids={},
         )
 
         self.config.register_global(
@@ -1027,16 +1032,28 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 initial_hidden = await self._is_managed_category_hidden(guild)
                 self.bot.add_view(HideSetupView(self, initial_hidden=initial_hidden), message_id=data['hide_setup_message_id'])
 
+            if data.get('repost_setup_message_id'):
+                self.bot.add_view(RepostSetupView(self), message_id=data['repost_setup_message_id'])
+
+            if data.get('discord_setup_message_id'):
+                self.bot.add_view(DiscordSetupView(self), message_id=data['discord_setup_message_id'])
+
         self.start_background_loop()
         await self.start_web_server()
 
     def start_background_loop(self):
         if not self._read_feeds_loop:
             self._read_feeds_loop = self.bot.loop.create_task(self.read_feeds())
+        if not hasattr(self, '_repost_loop') or not self._repost_loop:
+            self._repost_loop = self.bot.loop.create_task(self.repost_polling_task())
+        if not hasattr(self, '_discord_loop') or not self._discord_loop:
+            self._discord_loop = self.bot.loop.create_task(self.discord_polling_task())
 
     def cog_unload(self):
         if hasattr(self, '_repost_loop') and self._repost_loop:
             self._repost_loop.cancel()
+        if hasattr(self, '_discord_loop') and self._discord_loop:
+            self._discord_loop.cancel()
         for task in self.update_tasks.values():
             task.cancel()
         if self._read_feeds_loop:
@@ -1347,6 +1364,12 @@ class Afterwork(commands.Cog, name="Afterwork"):
         """Deploys the persistent settings panel for Website News & Events Reposter."""
         await self.afterwork_repost_deploy(ctx)
 
+    @afterwork_deploy_group.command(name="discord")
+    @commands.is_owner()
+    async def afterwork_discord_deploy_cmd(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for Discord Embed Manager."""
+        await self.afterwork_discord_deploy(ctx)
+
 
     @afterwork_group.group(name="repost")
     @commands.is_owner()
@@ -1460,7 +1483,10 @@ class Afterwork(commands.Cog, name="Afterwork"):
             self.afterwork_rss_deploy,
             self.afterwork_tv_deploy,
             self.afterwork_voice_deploy,
-            self.afterwork_hide_deploy
+            self.afterwork_hide_deploy,
+            self.afterwork_member_deploy,
+            self.afterwork_repost_deploy,
+            self.afterwork_discord_deploy
         ]
         
         for sub_cmd in subcommands:
@@ -1679,6 +1705,21 @@ class Afterwork(commands.Cog, name="Afterwork"):
         
         msg = await ctx.send(embed=embed, view=RepostSetupView(self))
         await self.config.guild(ctx.guild).repost_setup_message_id.set(msg.id)
+
+    async def afterwork_discord_deploy(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for Discord Embed Manager."""
+        old_message_id = await self.config.guild(ctx.guild).discord_setup_message_id()
+        if old_message_id:
+            try:
+                old_message = await ctx.channel.fetch_message(old_message_id)
+                await old_message.delete()
+            except Exception: pass
+
+        embed = discord.Embed(title="⚙️ Discord Embed Manager Setup", description="Loading...", color=discord.Color.purple())
+        await _update_discord_setup_embed(self, ctx.guild, embed)
+        
+        msg = await ctx.send(embed=embed, view=DiscordSetupView(self))
+        await self.config.guild(ctx.guild).discord_setup_message_id.set(msg.id)
 
     async def afterwork_hide_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Hide Category Visibility."""
@@ -2618,3 +2659,224 @@ async def repost_polling_task(self):
         await __import__('asyncio').sleep(60)
 
 Afterwork.repost_polling_task = repost_polling_task
+
+
+class DiscordChannelModal(discord.ui.Modal, title="Add Discord Embed Channel"):
+    module_id = discord.ui.TextInput(
+        label="Module ID (ark, dune, global)",
+        placeholder="e.g. ark",
+        required=True,
+        max_length=50
+    )
+    channel_id = discord.ui.TextInput(
+        label="Target Channel ID",
+        placeholder="e.g. 123456789012345678",
+        required=True,
+        max_length=25
+    )
+
+    def __init__(self, cog, **kwargs):
+        super().__init__(**kwargs)
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        mod_id = self.module_id.value.strip().lower()
+        chan_id_str = self.channel_id.value.strip()
+        
+        try:
+            chan_id = int(chan_id_str)
+        except ValueError:
+            return await interaction.response.send_message("❌ Invalid Channel ID. Must be a number.", ephemeral=True)
+
+        chan = interaction.guild.get_channel(chan_id)
+        if not chan:
+            return await interaction.response.send_message("❌ Channel not found in this server.", ephemeral=True)
+
+        async with self.cog.config.guild(interaction.guild).discord_channels() as channels:
+            channels[mod_id] = chan_id
+            
+        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed(title="⚙️ Discord Embed Setup")
+        await _update_discord_setup_embed(self.cog, interaction.guild, embed)
+        await interaction.message.edit(embed=embed)
+        await interaction.response.send_message(f"✅ Set {mod_id} to post to <#{chan_id}>.", ephemeral=True)
+
+class DiscordRemoveSelect(discord.ui.Select):
+    def __init__(self, options):
+        super().__init__(placeholder="Select a module channel to remove...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        mod_id = self.values[0]
+        async with self.view.cog.config.guild(interaction.guild).discord_channels() as channels:
+            if mod_id in channels:
+                del channels[mod_id]
+                
+        embed = interaction.message.embeds[0]
+        await _update_discord_setup_embed(self.view.cog, interaction.guild, embed)
+        await interaction.message.edit(embed=embed)
+        await interaction.response.send_message(f"✅ Removed {mod_id} target.", ephemeral=True)
+
+class DiscordRemoveView(discord.ui.View):
+    def __init__(self, cog, interaction):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.original_interaction = interaction
+
+    async def on_timeout(self):
+        try:
+            await self.original_interaction.edit_original_response(view=None)
+        except: pass
+
+class DiscordSetupView(discord.ui.View):
+    def __init__(self, cog):
+        super().__init__(timeout=None)
+        self.cog = cog
+
+    @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.primary, custom_id="discord_add_link")
+    async def add_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(DiscordChannelModal(self.cog))
+
+    @discord.ui.button(label="Remove Channel", style=discord.ButtonStyle.danger, custom_id="discord_remove_link")
+    async def remove_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channels = await self.cog.config.guild(interaction.guild).discord_channels()
+        if not channels:
+            return await interaction.response.send_message("❌ No targets set up yet.", ephemeral=True)
+            
+        options = [
+            discord.SelectOption(label=f"Module: {m}", description=f"Channel: {c}", value=m)
+            for m, c in channels.items()
+        ]
+        
+        view = DiscordRemoveView(self.cog, interaction)
+        select = DiscordRemoveSelect(options)
+        view.add_item(select)
+        
+        await interaction.response.send_message("Select a target to remove:", view=view, ephemeral=True)
+
+    @discord.ui.button(label="Enable / Disable", style=discord.ButtonStyle.secondary, custom_id="discord_toggle_enable")
+    async def toggle_enable_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        current = await self.cog.config.guild(interaction.guild).discord_enabled()
+        await self.cog.config.guild(interaction.guild).discord_enabled.set(not current)
+        
+        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed(title="⚙️ Discord Embed Setup")
+        await _update_discord_setup_embed(self.cog, interaction.guild, embed)
+        await interaction.response.edit_message(embed=embed)
+
+
+async def _update_discord_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
+    channels = await cog.config.guild(guild).discord_channels()
+    enabled = await cog.config.guild(guild).discord_enabled()
+    
+    embed.description = "Manage dynamic custom embeds sent from the Web Dashboard."
+    embed.clear_fields()
+    
+    status_str = "✅ **Enabled**" if enabled else "❌ **Disabled**"
+    embed.add_field(name="Status", value=status_str, inline=False)
+    
+    if channels:
+        ch_list = [f"**{m}** -> <#{c}>" for m, c in channels.items()]
+        embed.add_field(name="Target Channels", value="\n".join(ch_list), inline=False)
+    else:
+        embed.add_field(name="Target Channels", value="None configured. Use 'Set Channel'.", inline=False)
+    return embed
+
+
+async def discord_polling_task(self):
+    await self.bot.wait_until_ready()
+    import aiohttp
+    import json
+    import logging
+    log = logging.getLogger("red.afterwork")
+    while not self.bot.is_closed():
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Fetch Embeds from API
+                async with session.get("https://afterworkplay.com/api/db/embeds") as resp:
+                    if resp.status == 200:
+                        embeds_data = await resp.json()
+                        for guild in self.bot.guilds:
+                            channels = await self.config.guild(guild).discord_channels()
+                            if not channels: continue
+                            enabled = await self.config.guild(guild).discord_enabled()
+                            if not enabled: continue
+                            
+                            seen_ids = await self.config.guild(guild).discord_last_embeds_ids()
+                            if type(seen_ids) is not dict: seen_ids = {}
+                            
+                            for emb in embeds_data:
+                                eid = str(emb["id"])
+                                mod_id = (emb.get("module_id") or "global").lower()
+                                
+                                if mod_id not in channels:
+                                    continue
+                                    
+                                channel_id = channels[mod_id]
+                                channel = guild.get_channel(int(channel_id))
+                                if not channel: continue
+                                
+                                # Process embed JSON
+                                embed_json = emb.get("embed_json") or "{}"
+                                try:
+                                    e_dict = json.loads(embed_json)
+                                except:
+                                    e_dict = {}
+                                    
+                                discord_embed = discord.Embed.from_dict(e_dict) if e_dict else discord.Embed(title=emb["title"])
+                                
+                                # Add status if include_status is true
+                                if emb.get("include_status"):
+                                    try:
+                                        # Fetch status from afterwork API
+                                        async with session.get("https://afterworkplay.com/api/status") as st_resp:
+                                            if st_resp.status == 200:
+                                                st_data = await st_resp.json()
+                                                
+                                                servers_to_include = []
+                                                try:
+                                                    if emb.get("status_servers"):
+                                                        servers_to_include = json.loads(emb.get("status_servers"))
+                                                except: pass
+                                                
+                                                for node, srvs in st_data.get("amp_nodes", {}).items():
+                                                    for s_name, s_data in srvs.items():
+                                                        if not servers_to_include or s_name in servers_to_include:
+                                                            state = s_data.get("State", 0)
+                                                            status_emoji = "🟢" if state == 20 else "🔴"
+                                                            metrics = s_data.get("Metrics", {})
+                                                            players = metrics.get("ActiveUsers", 0)
+                                                            max_players = metrics.get("MaxUsers", 0)
+                                                            discord_embed.add_field(
+                                                                name=f"{status_emoji} {s_name}",
+                                                                value=f"Players: {players}/{max_players}",
+                                                                inline=True
+                                                            )
+                                    except Exception as e:
+                                        log.error(f"Error fetching status for embed: {e}")
+
+                                # Update or Send message
+                                msg = None
+                                msg_id = seen_ids.get(eid)
+                                if msg_id:
+                                    try:
+                                        msg = await channel.fetch_message(int(msg_id))
+                                        await msg.edit(embed=discord_embed)
+                                    except:
+                                        msg = None
+                                        
+                                if not msg:
+                                    msg = await channel.send(embed=discord_embed)
+                                    seen_ids[eid] = str(msg.id)
+                                    await self.config.guild(guild).discord_last_embeds_ids.set(seen_ids)
+                                    
+                                    # Pin if requested
+                                    if emb.get("pin_message"):
+                                        try:
+                                            await msg.pin()
+                                        except: pass
+                                        
+        except Exception as e:
+            log.error(f"Error in discord polling task: {e}")
+            
+        import asyncio
+        await asyncio.sleep(60)
+
+Afterwork.discord_polling_task = discord_polling_task
