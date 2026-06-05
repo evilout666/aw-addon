@@ -274,7 +274,7 @@ class AudioSettingsView(discord.ui.View):
         await _send_owner_dm(self.cog.bot, f"User {interaction.user.display_name} attempted to use owner controls in {interaction.guild.name}.")
         return False
 
-    @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="set_voice_channel")
+    @discord.ui.button(label="Channel", style=discord.ButtonStyle.primary, custom_id="set_voice_channel")
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(AudioSetVoiceChannelModal(self.cog))
 
@@ -469,7 +469,7 @@ class RssSetupView(discord.ui.View):
         if not await self._check_owner(interaction): return
         await interaction.response.send_message("Please use the command `[p]afterwork rss remove <name>` to remove a feed.", ephemeral=True)
 
-    @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.secondary, custom_id="rss_toggle_button", row=1)
+    @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.secondary, custom_id="rss_toggle_button", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
         current_state = await self.cog.config.guild(interaction.guild).rss_enabled()
@@ -574,7 +574,7 @@ class TvSetupView(discord.ui.View):
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
         await interaction.response.send_modal(TvSonarrIDModal(self.cog, interaction.message))
 
-    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="tv_toggle_system", row=1)
+    @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="tv_toggle_system", row=0)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user):
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
@@ -635,7 +635,7 @@ class VoiceSetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="voice_set_button", row=0)
+    @discord.ui.button(label="Channel", style=discord.ButtonStyle.primary, custom_id="voice_set_button", row=0)
     async def set_source_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user):
             await _send_owner_dm(self.cog.bot, f"Guild: {interaction.guild.name}. Unauthorized access: User {interaction.user.display_name} attempted to use owner controls.")
@@ -854,7 +854,7 @@ class HideSetupView(discord.ui.View):
         self.toggle_visibility_action.label = "Show" if initial_hidden else "Hide"
         self.toggle_visibility_action.style = discord.ButtonStyle.success if initial_hidden else discord.ButtonStyle.danger
 
-    @discord.ui.button(label="Category ID", style=discord.ButtonStyle.primary, custom_id="hide_set_category_button", row=0)
+    @discord.ui.button(label="Category", style=discord.ButtonStyle.primary, custom_id="hide_set_category_button", row=0)
     async def set_category_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): 
             return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
