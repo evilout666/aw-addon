@@ -2579,21 +2579,21 @@ async def discord_polling_task(self):
                                     except Exception as e:
                                         log.error(f"Error fetching status for embed: {e}")
 
-                                msg = None
                                 msg_id = seen_ids.get(eid)
                                 if msg_id:
                                     try:
                                         msg = await channel.fetch_message(int(msg_id))
                                         await msg.edit(embed=discord_embed)
-                                    except: msg = None
-                                        
-                                if not msg:
-                                    msg = await channel.send(embed=discord_embed)
-                                    seen_ids[eid] = str(msg.id)
-                                    await self.config.guild(guild).discord_last_embeds_ids.set(seen_ids)
-                                    if emb.get("pin_message"):
-                                        try: await msg.pin()
-                                        except: pass
+                                    except: pass
+                                else:
+                                    try:
+                                        msg = await channel.send(embed=discord_embed)
+                                        seen_ids[eid] = str(msg.id)
+                                        await self.config.guild(guild).discord_last_embeds_ids.set(seen_ids)
+                                        if emb.get("pin_message"):
+                                            try: await msg.pin()
+                                            except: pass
+                                    except Exception: pass
 
                 # 2. Fetch News from API
                 async with session.get("https://afterworkplay.com/api/db/news") as resp:
@@ -2628,18 +2628,18 @@ async def discord_polling_task(self):
                                     full_url = f"https://afterworkplay.com{image_url}" if image_url.startswith("/") else image_url
                                     discord_embed.set_image(url=full_url)
                                 
-                                msg = None
                                 msg_id = seen_ids.get(eid)
                                 if msg_id:
                                     try:
                                         msg = await channel.fetch_message(int(msg_id))
                                         await msg.edit(embed=discord_embed)
-                                    except: msg = None
-                                        
-                                if not msg:
-                                    msg = await channel.send(embed=discord_embed)
-                                    seen_ids[eid] = str(msg.id)
-                                    await self.config.guild(guild).discord_last_news_ids.set(seen_ids)
+                                    except: pass
+                                else:
+                                    try:
+                                        msg = await channel.send(embed=discord_embed)
+                                        seen_ids[eid] = str(msg.id)
+                                        await self.config.guild(guild).discord_last_news_ids.set(seen_ids)
+                                    except Exception: pass
 
                 # 3. Fetch Events from API
                 async with session.get("https://afterworkplay.com/api/db/events") as resp:
@@ -2672,18 +2672,18 @@ async def discord_polling_task(self):
                                 discord_embed = discord.Embed(title=f"📅 {title}", description=desc, color=discord.Color.orange())
                                 if start_str: discord_embed.add_field(name="Date/Time", value=start_str)
                                 
-                                msg = None
                                 msg_id = seen_ids.get(eid)
                                 if msg_id:
                                     try:
                                         msg = await channel.fetch_message(int(msg_id))
                                         await msg.edit(embed=discord_embed)
-                                    except: msg = None
-                                        
-                                if not msg:
-                                    msg = await channel.send(embed=discord_embed)
-                                    seen_ids[eid] = str(msg.id)
-                                    await self.config.guild(guild).discord_last_events_ids.set(seen_ids)
+                                    except: pass
+                                else:
+                                    try:
+                                        msg = await channel.send(embed=discord_embed)
+                                        seen_ids[eid] = str(msg.id)
+                                        await self.config.guild(guild).discord_last_events_ids.set(seen_ids)
+                                    except Exception: pass
 
         except Exception as e:
             log.error(f"Error in discord polling task: {e}")
