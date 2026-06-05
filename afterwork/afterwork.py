@@ -274,7 +274,7 @@ class AudioSettingsView(discord.ui.View):
         await _send_owner_dm(self.cog.bot, f"User {interaction.user.display_name} attempted to use owner controls in {interaction.guild.name}.")
         return False
 
-    @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.secondary, custom_id="set_voice_channel")
+    @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="set_voice_channel")
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(AudioSetVoiceChannelModal(self.cog))
 
@@ -389,7 +389,7 @@ class EmbedSetupView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.secondary, custom_id="embed_set_channel", row=0)
+    @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.primary, custom_id="embed_set_channel", row=0)
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
         await interaction.response.send_modal(EmbedNamedChannelSetModal(self.cog, interaction.message))
@@ -472,21 +472,13 @@ class RssSetupView(discord.ui.View):
     @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.secondary, custom_id="rss_toggle_button", row=1)
     async def toggle_system(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        
-        new_state = not (await self.cog.config.guild(interaction.guild).rss_enabled())
+        current_state = await self.cog.config.guild(interaction.guild).rss_enabled()
+        new_state = not current_state
         await self.cog.config.guild(interaction.guild).rss_enabled.set(new_state)
-        
-        button.label = "Disable" if new_state else "Enable"
-        button.style = discord.ButtonStyle.danger if new_state else discord.ButtonStyle.success
-        
         embed = interaction.message.embeds[0]
-        status_msg = f"System {'enabled' if new_state else 'disabled'}"
-        embed.set_footer(text=_get_admin_footer(interaction, status_msg))
-        
         await _update_rss_setup_embed(self.cog, interaction.guild, embed)
-        await interaction.message.edit(embed=embed, view=self)
-        await interaction.followup.send(f"System has been **{'enabled' if new_state else 'disabled'}**.", ephemeral=True)
+        view = RssSetupView(self.cog, initial_enabled=new_state)
+        await interaction.response.edit_message(embed=embed, view=view)
 
 
 # 4. TV MODALS AND VIEWS
@@ -564,7 +556,7 @@ class TvSetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    @discord.ui.button(label="Target Channel", style=discord.ButtonStyle.secondary, custom_id="tv_set_target", row=0)
+    @discord.ui.button(label="Target Channel", style=discord.ButtonStyle.primary, custom_id="tv_set_target", row=0)
     async def set_target_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user):
             return await interaction.response.send_message("Only owner can use this.", ephemeral=True)
@@ -643,7 +635,7 @@ class VoiceSetupView(discord.ui.View):
         self.toggle_system.label = "Disable" if initial_enabled else "Enable"
         self.toggle_system.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
-    @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.secondary, custom_id="voice_set_button", row=0)
+    @discord.ui.button(label="Channel ID", style=discord.ButtonStyle.primary, custom_id="voice_set_button", row=0)
     async def set_source_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user):
             await _send_owner_dm(self.cog.bot, f"Guild: {interaction.guild.name}. Unauthorized access: User {interaction.user.display_name} attempted to use owner controls.")
@@ -862,7 +854,7 @@ class HideSetupView(discord.ui.View):
         self.toggle_visibility_action.label = "Show" if initial_hidden else "Hide"
         self.toggle_visibility_action.style = discord.ButtonStyle.success if initial_hidden else discord.ButtonStyle.danger
 
-    @discord.ui.button(label="Category ID", style=discord.ButtonStyle.secondary, custom_id="hide_set_category_button", row=0)
+    @discord.ui.button(label="Category ID", style=discord.ButtonStyle.primary, custom_id="hide_set_category_button", row=0)
     async def set_category_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.cog.bot.is_owner(interaction.user): 
             return await interaction.response.send_message("Only owner can use this.", ephemeral=False)
@@ -1275,12 +1267,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
         """Deploys the persistent settings panel for Hide Category Visibility."""
         await self.afterwork_hide_deploy(ctx)
 
-    @afterwork_deploy_group.command(name="member")
-    @commands.is_owner()
-    async def afterwork_member_deploy_cmd(self, ctx: commands.Context):
-        """Deploys the persistent settings panel for Membership."""
-        await self.afterwork_member_deploy(ctx)
-
     @afterwork_deploy_group.command(name="discord")
     @commands.is_owner()
     async def afterwork_discord_deploy_cmd(self, ctx: commands.Context):
@@ -1372,7 +1358,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
             self.afterwork_tv_deploy,
             self.afterwork_voice_deploy,
             self.afterwork_hide_deploy,
-            self.afterwork_member_deploy,
             self.afterwork_discord_deploy
         ]
         
@@ -1533,21 +1518,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
                     await message.delete()
                     break
         except Exception: pass
-
-    async def afterwork_member_deploy(self, ctx: commands.Context):
-        """Deploys the persistent settings panel for Membership."""
-        old_message_id = await self.config.guild(ctx.guild).member_setup_message_id()
-        if old_message_id:
-            try:
-                old_message = await ctx.channel.fetch_message(old_message_id)
-                await old_message.delete()
-            except Exception: pass
-
-        embed = discord.Embed(title="Member Application Setup", description="Loading...", color=discord.Color.purple())
-        await _update_member_setup_embed(self, ctx.guild, embed)
-        
-        msg = await ctx.send(embed=embed, view=MemberSetupView(self))
-        await self.config.guild(ctx.guild).member_setup_message_id.set(msg.id)
 
     async def afterwork_discord_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Discord Embed Manager."""
@@ -2169,167 +2139,6 @@ class Afterwork(commands.Cog, name="Afterwork"):
 
 # --- MEMBER MODALS AND VIEWS ---
 
-class MemberApplyModal(discord.ui.Modal, title="Membership Application"):
-    rules = discord.ui.TextInput(label="Read and agree to rules? (Type Yes)", style=discord.TextStyle.short, required=True, max_length=10)
-    games = discord.ui.TextInput(label="Which games? (ARK / Dune / None)", style=discord.TextStyle.short, required=True, placeholder="ARK / Dune / None", max_length=50)
-
-    def __init__(self, cog):
-        super().__init__(timeout=None)
-        self.cog = cog
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        rules_ans = self.rules.value.lower().strip()
-        if rules_ans not in ["yes", "y", "agree", "i agree", "true"]:
-            return await interaction.followup.send("❌ You must agree to the rules to join.", ephemeral=True)
-        
-        games_ans = self.games.value.lower()
-        settings = await self.cog.config.guild(interaction.guild).all()
-        
-        roles_to_add = []
-        base_role_id = settings.get('member_base_role_id')
-        ark_role_id = settings.get('member_ark_role_id')
-        dune_role_id = settings.get('member_dune_role_id')
-        
-        if base_role_id:
-            r = interaction.guild.get_role(base_role_id)
-            if r: roles_to_add.append(r)
-            
-        if ark_role_id and "ark" in games_ans:
-            r = interaction.guild.get_role(ark_role_id)
-            if r: roles_to_add.append(r)
-            
-        if dune_role_id and "dune" in games_ans:
-            r = interaction.guild.get_role(dune_role_id)
-            if r: roles_to_add.append(r)
-            
-        if not roles_to_add:
-            return await interaction.followup.send("✅ Application processed. (No specific roles were assigned).", ephemeral=True)
-            
-        try:
-            await interaction.user.add_roles(*roles_to_add, reason="Membership Application Auto-Approve")
-            assigned = ", ".join([r.name for r in roles_to_add])
-            await interaction.followup.send(f"✅ Application approved! You have been granted: **{assigned}**.", ephemeral=True)
-        except discord.Forbidden:
-            await interaction.followup.send("❌ Error: I don't have permission to assign those roles. Please contact an admin.", ephemeral=True)
-        except Exception as e:
-            await interaction.followup.send(f"❌ Error assigning roles: {e}", ephemeral=True)
-
-class MemberApplyView(discord.ui.View):
-    def __init__(self, cog):
-        super().__init__(timeout=None)
-        self.cog = cog
-
-    @discord.ui.button(label="Apply for Membership", style=discord.ButtonStyle.secondary, custom_id="member_apply_btn", emoji="📝")
-    async def apply_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(MemberApplyModal(self.cog))
-
-class MemberSetRoleModal(discord.ui.Modal):
-    role_input = discord.ui.TextInput(label="Role ID", style=discord.TextStyle.short, required=True, max_length=25)
-
-    def __init__(self, cog, original_message: discord.Message, role_type: str):
-        super().__init__(title=f"Set {role_type} Role", timeout=300)
-        self.cog = cog
-        self.original_message = original_message
-        self.role_type = role_type # 'base', 'ark', or 'dune'
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        try:
-            role_id = int(self.role_input.value.strip())
-        except ValueError:
-            return await interaction.followup.send("❌ **Error:** Role ID must be a number.", ephemeral=True)
-            
-        role = interaction.guild.get_role(role_id)
-        if not role:
-            return await interaction.followup.send("❌ **Error:** Role not found.", ephemeral=True)
-            
-        async with self.cog.config.guild(interaction.guild).all() as settings:
-            if self.role_type == 'base':
-                settings['member_base_role_id'] = role_id
-            elif self.role_type == 'ark':
-                settings['member_ark_role_id'] = role_id
-            elif self.role_type == 'dune':
-                settings['member_dune_role_id'] = role_id
-                
-        embed = self.original_message.embeds[0]
-        embed.set_footer(text=_get_admin_footer(interaction, f"Updated {self.role_type} Role"))
-        await _update_member_setup_embed(self.cog, interaction.guild, embed)
-        await self.original_message.edit(embed=embed, view=MemberSetupView(self.cog))
-        await interaction.followup.send(f"✅ {self.role_type.capitalize()} Role set to `{role.name}`.", ephemeral=True)
-
-class MemberDeployPanelModal(discord.ui.Modal, title="Deploy Apply Button"):
-    channel_input = discord.ui.TextInput(label="Channel ID to deploy in", style=discord.TextStyle.short, required=True, max_length=25)
-
-    def __init__(self, cog, original_message: discord.Message):
-        super().__init__(timeout=300)
-        self.cog = cog
-        self.original_message = original_message
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        try:
-            channel_id = int(self.channel_input.value.strip())
-        except ValueError:
-            return await interaction.followup.send("❌ **Error:** Channel ID must be a number.", ephemeral=True)
-            
-        channel = interaction.guild.get_channel(channel_id)
-        if not channel or not isinstance(channel, discord.TextChannel):
-            return await interaction.followup.send("❌ **Error:** Channel not found.", ephemeral=True)
-            
-        embed = discord.Embed(
-            title="Membership Application",
-            description="Welcome to the server! Click the button below to submit your application. You must agree to the rules and let us know which games you want to play.",
-            color=discord.Color.blue()
-        )
-        try:
-            await channel.send(embed=embed, view=MemberApplyView(self.cog))
-            await interaction.followup.send(f"✅ Application panel deployed to {channel.mention}.", ephemeral=True)
-        except discord.Forbidden:
-            await interaction.followup.send("❌ **Error:** I don't have permission to send messages in that channel.", ephemeral=True)
-
-class MemberSetupView(discord.ui.View):
-    def __init__(self, cog):
-        super().__init__(timeout=None)
-        self.cog = cog
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if await self.cog.bot.is_owner(interaction.user):
-            return True
-        await _send_owner_dm(self.cog.bot, f"User {interaction.user.display_name} attempted to use owner controls in {interaction.guild.name}.")
-        return False
-
-    @discord.ui.button(label="Set Base Role", style=discord.ButtonStyle.secondary, custom_id="member_set_base")
-    async def set_base_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(MemberSetRoleModal(self.cog, interaction.message, 'base'))
-
-    @discord.ui.button(label="Set Ark Role", style=discord.ButtonStyle.secondary, custom_id="member_set_ark")
-    async def set_ark_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(MemberSetRoleModal(self.cog, interaction.message, 'ark'))
-
-    @discord.ui.button(label="Set Dune Role", style=discord.ButtonStyle.secondary, custom_id="member_set_dune")
-    async def set_dune_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(MemberSetRoleModal(self.cog, interaction.message, 'dune'))
-
-    @discord.ui.button(label="Drop Apply Panel Here", style=discord.ButtonStyle.secondary, custom_id="member_deploy_panel")
-    async def deploy_panel_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(MemberDeployPanelModal(self.cog, interaction.message))
-
-async def _update_member_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
-    settings = await cog.config.guild(guild).all()
-    base_id = settings.get('member_base_role_id')
-    ark_id = settings.get('member_ark_role_id')
-    dune_id = settings.get('member_dune_role_id')
-
-    embed.title = "⚙️ Member Application Setup"
-    embed.description = "Configure the roles assigned when a user submits a membership application."
-    embed.color = discord.Color.blue()
-    
-    embed.clear_fields()
-    embed.add_field(name="Base Role", value=f"<@&{base_id}>" if base_id else "Not Set", inline=True)
-    embed.add_field(name="Ark Role", value=f"<@&{ark_id}>" if ark_id else "Not Set", inline=True)
-    embed.add_field(name="Dune Role", value=f"<@&{dune_id}>" if dune_id else "Not Set", inline=True)
-
 
 # --- REPOST AUTO-POSTER ---
 
@@ -2378,7 +2187,7 @@ class RepostSetupView(discord.ui.View):
         await _send_owner_dm(self.cog.bot, f"User {interaction.user.display_name} attempted to use owner controls in {interaction.guild.name}.")
         return False
 
-    @discord.ui.button(label="Target Channel", style=discord.ButtonStyle.secondary, custom_id="repost_add_link")
+    @discord.ui.button(label="Target Channel", style=discord.ButtonStyle.primary, custom_id="repost_add_link")
     async def add_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(RepostAddLinkModal(self.cog, interaction.message))
         
@@ -2593,7 +2402,7 @@ class DiscordSetupView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
 
-    @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.secondary, custom_id="discord_add_link")
+    @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.primary, custom_id="discord_add_link")
     async def add_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(DiscordChannelModal(self.cog))
 
@@ -2614,14 +2423,16 @@ class DiscordSetupView(discord.ui.View):
         
         await interaction.response.send_message("Select a target to remove:", view=view, ephemeral=True)
 
-    @discord.ui.button(label="Enable / Disable", style=discord.ButtonStyle.secondary, custom_id="discord_toggle_enable")
+    @discord.ui.button(label="Toggle Status", style=discord.ButtonStyle.success, custom_id="discord_toggle_enable")
     async def toggle_enable_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         current = await self.cog.config.guild(interaction.guild).discord_enabled()
-        await self.cog.config.guild(interaction.guild).discord_enabled.set(not current)
+        new_state = not current
+        await self.cog.config.guild(interaction.guild).discord_enabled.set(new_state)
         
         embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed(title="Manage Discord Setup")
         await _update_discord_setup_embed(self.cog, interaction.guild, embed)
-        await interaction.response.edit_message(embed=embed)
+        view = DiscordSetupView(self.cog, initial_enabled=new_state)
+        await interaction.response.edit_message(embed=embed, view=view)
 
 
 async def _update_discord_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
