@@ -1342,6 +1342,22 @@ class Afterwork(commands.Cog, name="Afterwork"):
             else:
                 await ctx.send(f"❌ Feed **{feed_name}** not found.")
 
+    # --- RESET SUBCOMMAND GROUP ---
+    
+    @afterwork_group.group(name="reset", invoke_without_command=True)
+    async def afterwork_reset_group(self, ctx: commands.Context):
+        """Reset configuration hubs."""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
+    @afterwork_reset_group.command(name="audio")
+    async def afterwork_reset_audio_cmd(self, ctx: commands.Context):
+        """Clears all audio settings (playlists, channel id, etc.)."""
+        await self.config.guild(ctx.guild).audio_playlists.set({})
+        await self.config.guild(ctx.guild).audio_music_voice_channel_id.set(None)
+        await self.config.guild(ctx.guild).audio_is_enabled.set(False)
+        await ctx.send("✅ Audio configuration has been fully reset (playlists and channel bindings cleared).")
+
     # === Main Deploy All Command ===
     async def deploy_all(self, ctx: commands.Context):
         """Deploys all configuration hubs sequentially in the channel."""
@@ -1528,7 +1544,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
                 await old_message.delete()
             except Exception: pass
 
-        embed = discord.Embed(title="⚙️ Discord Embed Manager Setup", description="Loading...", color=discord.Color.purple())
+        embed = discord.Embed(title="Discord Embed Manager Setup", description="Loading...", color=discord.Color.purple())
         await _update_discord_setup_embed(self, ctx.guild, embed)
         
         msg = await ctx.send(embed=embed, view=DiscordSetupView(self))
@@ -2206,7 +2222,7 @@ async def _update_repost_setup_embed(cog, guild: discord.Guild, embed: discord.E
     channels = await cog.config.guild(guild).repost_channels()
     enabled = await cog.config.guild(guild).repost_enabled()
     
-    embed.title = "⚙️ Website News & Events Reposter Setup"
+    embed.title = "Website News & Events Reposter Setup"
     embed.description = "Link website Modules to Discord Channels. When a new post is made on the website for a linked module, it will automatically be posted here."
     embed.color = discord.Color.gold()
     embed.clear_fields()
