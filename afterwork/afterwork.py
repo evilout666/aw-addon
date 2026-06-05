@@ -1724,7 +1724,7 @@ class Afterwork(commands.Cog, name="Afterwork"):
         if time.time() - self._playlist_cache_time > 60:
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.get("https://afterworkplay.com/api/db/playlists") as resp:
+                    async with session.get("https://dash.afterworkplay.com/api/db/playlists") as resp:
                         if resp.status == 200:
                             self._playlist_cache = await resp.json()
                             self._playlist_cache_time = time.time()
