@@ -221,10 +221,33 @@ class AudioPlayerPlayModal(discord.ui.Modal, title="Request a Song or Playlist")
         await self.cog._invoke_audio_command(interaction, "play", query=final_query)
 
 
+
+class AudioPlayerPlaylistSelect(discord.ui.Select):
+    def __init__(self, playlists, cog):
+        options = [
+            discord.SelectOption(label=p["name"][:100], description="Play this playlist", value=p["url"][:100])
+            for p in playlists[:25]
+        ]
+        if not options:
+            options = [discord.SelectOption(label="No playlists available", value="none")]
+        
+        super().__init__(placeholder="Select a Playlist...", min_values=1, max_values=1, options=options, custom_id="audio_player_playlist_select")
+        self.cog = cog
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.values[0] == "none":
+            await interaction.response.send_message("No playlist selected.", ephemeral=True)
+            return
+        url = self.values[0]
+        await self.cog._invoke_audio_command(interaction, "play", query=url)
+
 class AudioPlayerView(discord.ui.View):
-    def __init__(self, cog, is_playing: bool = False):
+    def __init__(self, cog, is_playing: bool = False, playlists: list = None):
         super().__init__(timeout=None)
         self.cog = cog
+        
+        if playlists:
+            self.add_item(AudioPlayerPlaylistSelect(playlists, cog))
 
         song_button = discord.ui.Button(label="Song", style=discord.ButtonStyle.primary, custom_id="player_song")
         song_button.callback = self.on_song
@@ -1818,6 +1841,24 @@ class Afterwork(commands.Cog, name="Afterwork"):
         
         await message.edit(embed=embed, view=self.settings_view)
 
+
+    async def get_cached_playlists(self):
+        import time
+        import aiohttp
+        if not hasattr(self, "_playlist_cache"):
+            self._playlist_cache = []
+            self._playlist_cache_time = 0
+            
+        if time.time() - self._playlist_cache_time > 60:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get("https://afterworkplay.com/api/db/playlists") as resp:
+                        if resp.status == 200:
+                            self._playlist_cache = await resp.json()
+                            self._playlist_cache_time = time.time()
+            except: pass
+        return self._playlist_cache
+
     async def _debounced_update(self, guild: discord.Guild):
         await asyncio.sleep(1.5)
         await self._update_player_message(guild)
@@ -1878,7 +1919,8 @@ class Afterwork(commands.Cog, name="Afterwork"):
                         next_song_value += f"\n\n... and {remaining_count} more."
                     embed.add_field(name="Next Song", value=next_song_value, inline=False)
 
-            new_view = AudioPlayerView(self, is_playing=is_playing)
+            playlists = await self.get_cached_playlists()
+            new_view = AudioPlayerView(self, is_playing=is_playing, playlists=playlists)
             await message.edit(embed=embed, view=new_view)
         except (discord.NotFound, discord.Forbidden):
             await self.config.guild(guild).audio_player_message_id.clear()
