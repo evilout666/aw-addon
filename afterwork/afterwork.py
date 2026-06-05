@@ -967,6 +967,8 @@ class Afterwork(commands.Cog, name="Afterwork"):
             discord_enabled=True,
             discord_channels={},
             discord_last_embeds_ids={},
+            discord_last_news_ids={},
+            discord_last_events_ids={},
         )
 
         self.config.register_global(
@@ -2691,11 +2693,12 @@ async def discord_polling_task(self):
     import aiohttp
     import json
     import logging
+    import discord
     log = logging.getLogger("red.afterwork")
     while not self.bot.is_closed():
         try:
             async with aiohttp.ClientSession() as session:
-                # Fetch Embeds from API
+                # 1. Fetch Embeds from API
                 async with session.get("https://afterworkplay.com/api/db/embeds") as resp:
                     if resp.status == 200:
                         embeds_data = await resp.json()
@@ -2712,47 +2715,33 @@ async def discord_polling_task(self):
                                 eid = str(emb["id"])
                                 mod_id = (emb.get("module_id") or "global").lower()
                                 
-                                if mod_id not in channels:
-                                    continue
-                                    
+                                if mod_id not in channels: continue
                                 channel_id = channels[mod_id]
                                 channel = guild.get_channel(int(channel_id))
                                 if not channel: continue
                                 
-                                # Process embed JSON
                                 embed_json = emb.get("embed_json") or "{}"
-                                try:
-                                    e_dict = json.loads(embed_json)
-                                except:
-                                    e_dict = {}
-                                    
+                                try: e_dict = json.loads(embed_json)
+                                except: e_dict = {}
                                 discord_embed = discord.Embed.from_dict(e_dict) if e_dict else discord.Embed(title=emb["title"])
                                 
-                                # Add status if include_status is true
                                 if emb.get("include_status"):
                                     try:
-                                        # Fetch status from afterwork API
                                         async with session.get("https://afterworkplay.com/api/status") as st_resp:
                                             if st_resp.status == 200:
                                                 st_data = await st_resp.json()
-                                                
                                                 servers_to_include = []
                                                 try:
-                                                    if emb.get("status_servers"):
-                                                        servers_to_include = json.loads(emb.get("status_servers"))
+                                                    if emb.get("status_servers"): servers_to_include = json.loads(emb.get("status_servers"))
                                                 except: pass
-                                                
                                                 raw_servers = st_data
                                                 server_list = raw_servers if isinstance(raw_servers, list) else (raw_servers.get("instances") or raw_servers.get("Instances") or raw_servers.get("Result") or raw_servers.get("result") or [])
                                                 flat_servers = []
                                                 if isinstance(server_list, list):
                                                     if len(server_list) > 0 and isinstance(server_list[0], dict) and "AvailableInstances" in server_list[0]:
                                                         for t in server_list:
-                                                            if t.get("AvailableInstances"):
-                                                                flat_servers.extend(t["AvailableInstances"])
-                                                    else:
-                                                        flat_servers = server_list
-                                                        
+                                                            if t.get("AvailableInstances"): flat_servers.extend(t["AvailableInstances"])
+                                                    else: flat_servers = server_list
                                                 for s_data in flat_servers:
                                                     if not isinstance(s_data, dict): continue
                                                     s_name = s_data.get("InstanceName", "Unknown")
@@ -2762,35 +2751,116 @@ async def discord_polling_task(self):
                                                         metrics = s_data.get("Metrics", {})
                                                         players = metrics.get("ActiveUsers", 0)
                                                         max_players = metrics.get("MaxUsers", 0)
-                                                        discord_embed.add_field(
-                                                            name=f"{status_emoji} {s_name}",
-                                                            value=f"Players: {players}/{max_players}",
-                                                            inline=True
-                                                        )
+                                                        discord_embed.add_field(name=f"{status_emoji} {s_name}", value=f"Players: {players}/{max_players}", inline=True)
                                     except Exception as e:
                                         log.error(f"Error fetching status for embed: {e}")
 
-                                # Update or Send message
                                 msg = None
                                 msg_id = seen_ids.get(eid)
                                 if msg_id:
                                     try:
                                         msg = await channel.fetch_message(int(msg_id))
                                         await msg.edit(embed=discord_embed)
-                                    except:
-                                        msg = None
+                                    except: msg = None
                                         
                                 if not msg:
                                     msg = await channel.send(embed=discord_embed)
                                     seen_ids[eid] = str(msg.id)
                                     await self.config.guild(guild).discord_last_embeds_ids.set(seen_ids)
-                                    
-                                    # Pin if requested
                                     if emb.get("pin_message"):
-                                        try:
-                                            await msg.pin()
+                                        try: await msg.pin()
                                         except: pass
+
+                # 2. Fetch News from API
+                async with session.get("https://afterworkplay.com/api/db/news") as resp:
+                    if resp.status == 200:
+                        news_data = await resp.json()
+                        for guild in self.bot.guilds:
+                            channels = await self.config.guild(guild).discord_channels()
+                            if not channels: continue
+                            enabled = await self.config.guild(guild).discord_enabled()
+                            if not enabled: continue
+                            
+                            seen_ids = await self.config.guild(guild).discord_last_news_ids()
+                            if type(seen_ids) is not dict: seen_ids = {}
+                            
+                            for n in news_data:
+                                eid = str(n["id"])
+                                mod_id = (n.get("module_id") or "global").lower()
+                                
+                                if mod_id not in channels: continue
+                                channel_id = channels[mod_id]
+                                channel = guild.get_channel(int(channel_id))
+                                if not channel: continue
+                                
+                                title = n.get("title") or "News"
+                                subtitle = n.get("subtitle") or ""
+                                content = n.get("content") or ""
+                                image_url = n.get("image_url")
+                                
+                                discord_embed = discord.Embed(title=title, description=content, color=discord.Color.red())
+                                if subtitle: discord_embed.set_author(name=subtitle)
+                                if image_url:
+                                    full_url = f"https://afterworkplay.com{image_url}" if image_url.startswith("/") else image_url
+                                    discord_embed.set_image(url=full_url)
+                                
+                                msg = None
+                                msg_id = seen_ids.get(eid)
+                                if msg_id:
+                                    try:
+                                        msg = await channel.fetch_message(int(msg_id))
+                                        await msg.edit(embed=discord_embed)
+                                    except: msg = None
                                         
+                                if not msg:
+                                    msg = await channel.send(embed=discord_embed)
+                                    seen_ids[eid] = str(msg.id)
+                                    await self.config.guild(guild).discord_last_news_ids.set(seen_ids)
+
+                # 3. Fetch Events from API
+                async with session.get("https://afterworkplay.com/api/db/events") as resp:
+                    if resp.status == 200:
+                        events_data = await resp.json()
+                        for guild in self.bot.guilds:
+                            channels = await self.config.guild(guild).discord_channels()
+                            if not channels: continue
+                            enabled = await self.config.guild(guild).discord_enabled()
+                            if not enabled: continue
+                            
+                            seen_ids = await self.config.guild(guild).discord_last_events_ids()
+                            if type(seen_ids) is not dict: seen_ids = {}
+                            
+                            for ev in events_data:
+                                eid = str(ev["id"])
+                                mod_id = (ev.get("module_id") or "global").lower()
+                                
+                                if mod_id not in channels: continue
+                                channel_id = channels[mod_id]
+                                channel = guild.get_channel(int(channel_id))
+                                if not channel: continue
+                                
+                                title = ev.get("title") or "Event"
+                                desc = ev.get("description") or ""
+                                start_date = ev.get("start_date") or ""
+                                start_time = ev.get("start_time") or ""
+                                start_str = f"{start_date} {start_time}".strip()
+                                
+                                discord_embed = discord.Embed(title=f"📅 {title}", description=desc, color=discord.Color.orange())
+                                if start_str: discord_embed.add_field(name="Date/Time", value=start_str)
+                                
+                                msg = None
+                                msg_id = seen_ids.get(eid)
+                                if msg_id:
+                                    try:
+                                        msg = await channel.fetch_message(int(msg_id))
+                                        await msg.edit(embed=discord_embed)
+                                    except: msg = None
+                                        
+                                if not msg:
+                                    msg = await channel.send(embed=discord_embed)
+                                    seen_ids[eid] = str(msg.id)
+                                    await self.config.guild(guild).discord_last_events_ids.set(seen_ids)
+
         except Exception as e:
             log.error(f"Error in discord polling task: {e}")
             

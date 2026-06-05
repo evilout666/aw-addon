@@ -3,6 +3,21 @@
 A unified, standalone administration and automation cog for Red-DiscordBot, specifically tailored for private game server community management.
 
 🔗 **Web Control Dashboard:** [dash.afterworkplay.com](https://dash.afterworkplay.com/)
+🔗 **Public Website:** [afterworkplay.com](https://afterworkplay.com)
+
+---
+
+## 🏗️ Repository Architecture
+
+The Afterwork ecosystem is divided into two separate repositories:
+
+1. **`aw_addons` (This Repository - Public)**
+   - **Purpose:** Contains the complete Red-DiscordBot cogs.
+   - **Branch Strategy:** The `main` branch holds the stable, complete cog code under the `afterwork/` directory. The `backend` branch contains the Go server status bridge.
+
+2. **`afterwork` (Private)**
+   - **Purpose:** Contains the frontend web interfaces, Cloudflare functions, and all project documentation (including development guidelines and status board).
+   - **Tech Stack:** HTML/JS/CSS, Cloudflare Pages, Cloudflare Workers/Functions, Cloudflare D1.
 
 ---
 
@@ -19,7 +34,7 @@ The cog adheres to a clean, standardized user experience and security model:
 
 ## 📦 Subsystems
 
-The unified cog merges 6 distinct administrative sub-modules into one cohesive package:
+The unified cog merges multiple distinct administrative sub-modules into one cohesive package:
 
 | Subsystem | Core Feature | Discord UI Components |
 |:---|:---|:---|
@@ -40,7 +55,7 @@ Deploy the hubs in a designated administration channel using the following comma
 |:---|:---|
 | `[p]afterwork` | Displays the status dashboard showing active/inactive modules. |
 | `[p]afterwork help` | Lists all available subcommand groups. |
-| `[p]afterwork deploy` | Deploys all 6 interactive configuration hubs sequentially. |
+| `[p]afterwork deploy` | Deploys all interactive configuration hubs sequentially. |
 | `[p]afterwork deploy audio` | Deploys the Audio player control settings hub. |
 | `[p]afterwork deploy embed` | Deploys the custom JSON embed publisher hub. |
 | `[p]afterwork deploy rss` | Deploys the RSS feed subscription hub. |
@@ -53,7 +68,7 @@ Deploy the hubs in a designated administration channel using the following comma
 ## 🚀 Installation & Setup
 
 ### 1. Placement
-Copy the **[afterwork/](file:///root/projects/redbot-cogs/aw-addon/afterwork)** folder into a valid cog directory on your Red-DiscordBot instance (use `[p]paths` to list valid paths).
+Copy the **`afterwork/`** folder into a valid cog directory on your Red-DiscordBot instance (use `[p]paths` to list valid paths).
 
 ### 2. Loading
 Load the cog on your Discord instance:
@@ -73,16 +88,3 @@ To safely monitor and fetch the live statuses of your CubeCoders AMP game server
 curl -fsSL https://raw.githubusercontent.com/evilout666/aw-addon/backend/install.sh | sudo bash
 ```
 *This installer automatically pulls the repository code, builds the binary, secures local credentials, and creates a systemd service.*
-
----
-
-## 📂 Project Organization
-
-This repository uses a two-branch layout to isolate the Discord Bot Cog & Web Dashboard from the Go Status Service:
-
-* **[afterwork/](file:///root/projects/redbot-cogs/aw-addon/afterwork)** (Python): The Discord bot cog files (located on this **`main`** branch).
-* **[web/](file:///root/projects/redbot-cogs/aw-addon/web)** (Static HTML/JS/CSS): The static web control dashboard files (located on this **`main`** branch). Can be hosted manually or accessed directly at [dash.afterworkplay.com](https://dash.afterworkplay.com/).
-* **[AGY.md](file:///root/projects/redbot-cogs/aw-addon/AGY.md)**: AI assistant coding standards and branch directory definitions.
-* **[STATUS.md](file:///root/projects/redbot-cogs/aw-addon/STATUS.md)**: Feature logs and future ideas status board.
-* **`backend` Branch** (Go): Contains the Go server status bridge.
-
