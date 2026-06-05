@@ -188,25 +188,6 @@ class AudioSetVoiceChannelModal(discord.ui.Modal, title="Set Music Channel"):
         await self.cog.update_settings_message(interaction.guild, interaction.message)
 
 
-class AudioAddPlaylistModal(discord.ui.Modal, title="Add a Saved Playlist"):
-    playlist_name = discord.ui.TextInput(label="Playlist Name", placeholder="e.g., Lofi, Workout Mix", required=True)
-    playlist_url = discord.ui.TextInput(label="Playlist URL", placeholder="Paste the YouTube or Spotify playlist URL.", required=True)
-
-    def __init__(self, cog):
-        super().__init__()
-        self.cog = cog
-
-    async def on_submit(self, interaction: discord.Interaction):
-        name = self.playlist_name.value.strip().lower()
-        url = self.playlist_url.value.strip()
-        
-        async with self.cog.config.guild(interaction.guild).audio_playlists() as playlists:
-            playlists[name] = url
-            
-        await interaction.response.defer(ephemeral=True)
-        await self.cog.update_settings_message(interaction.guild, interaction.message)
-
-
 class AudioPlayerPlayModal(discord.ui.Modal, title="Request a Song or Playlist"):
     query_input = discord.ui.TextInput(label="URL, Search, or Saved Playlist Name", placeholder="Paste a URL or type a song/playlist name.", required=True)
 
@@ -297,31 +278,6 @@ class AudioSettingsView(discord.ui.View):
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(AudioSetVoiceChannelModal(self.cog))
 
-    @discord.ui.button(label="Add Playlist", style=discord.ButtonStyle.secondary, custom_id="add_playlist")
-    async def add_playlist_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(AudioAddPlaylistModal(self.cog))
-
-    @discord.ui.button(label="Remove Playlist", style=discord.ButtonStyle.secondary, custom_id="remove_playlist")
-    async def remove_playlist_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        playlists = await self.cog.config.guild(interaction.guild).audio_playlists()
-        if not playlists:
-            return await interaction.response.defer()
-
-        options = [discord.SelectOption(label=name) for name in playlists.keys()]
-        select_menu = discord.ui.Select(placeholder="Select a playlist to remove...", options=options)
-
-        async def select_callback(select_interaction: discord.Interaction):
-            playlist_name = select_interaction.data["values"][0]
-            async with self.cog.config.guild(interaction.guild).audio_playlists() as pls:
-                if playlist_name in pls:
-                    del pls[playlist_name]
-            await select_interaction.response.defer(ephemeral=True)
-            await self.cog.update_settings_message(interaction.guild, interaction.message)
-
-        select_menu.callback = select_callback
-        temp_view = discord.ui.View(timeout=180)
-        temp_view.add_item(select_menu)
-        await interaction.response.send_message("Choose a playlist to remove:", view=temp_view, ephemeral=True)
 
     @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.grey, custom_id="toggle_automation")
     async def toggle_automation_button(self, interaction: discord.Interaction, button: discord.ui.Button):
