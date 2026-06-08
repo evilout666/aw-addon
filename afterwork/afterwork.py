@@ -2322,7 +2322,7 @@ async def repost_polling_task(self):
                         news_data = await resp.json()
                         for guild in self.bot.guilds:
                             last_news_id = await self.config.guild(guild).repost_last_news_id()
-                            channels = await self.config.guild(guild).discord_channels()
+                            channels = await self.config.guild(guild).repost_channels()
                             if not channels: continue
                             
                             highest_seen_news = last_news_id
@@ -2338,7 +2338,7 @@ async def repost_polling_task(self):
                                 mod_id = n.get("module_id") or "global"
                                 mod_id = mod_id.lower()
                                 
-                                enabled = await self.config.guild(guild).discord_enabled()
+                                enabled = await self.config.guild(guild).repost_enabled()
                                 if enabled and mod_id in channels:
                                     chan_id = channels[mod_id]
                                     channel = guild.get_channel(chan_id)
@@ -2367,7 +2367,7 @@ async def repost_polling_task(self):
                         events_data = await resp.json()
                         for guild in self.bot.guilds:
                             last_events_id = await self.config.guild(guild).repost_last_events_id()
-                            channels = await self.config.guild(guild).discord_channels()
+                            channels = await self.config.guild(guild).repost_channels()
                             if not channels: continue
                             
                             highest_seen_event = last_events_id
@@ -2382,7 +2382,7 @@ async def repost_polling_task(self):
                                 mod_id = e.get("module_id") or "global"
                                 mod_id = mod_id.lower()
                                 
-                                enabled = await self.config.guild(guild).discord_enabled()
+                                enabled = await self.config.guild(guild).repost_enabled()
                                 if enabled and mod_id in channels:
                                     chan_id = channels[mod_id]
                                     channel = guild.get_channel(chan_id)
@@ -2541,9 +2541,9 @@ async def discord_polling_task(self):
                     if resp.status == 200:
                         embeds_data = await resp.json()
                         for guild in self.bot.guilds:
-                            channels = await self.config.guild(guild).discord_channels()
+                            channels = await self.config.guild(guild).repost_channels()
                             if not channels: continue
-                            enabled = await self.config.guild(guild).discord_enabled()
+                            enabled = await self.config.guild(guild).repost_enabled()
                             if not enabled: continue
                             
                             seen_ids = await self.config.guild(guild).discord_last_embeds_ids()
@@ -2617,9 +2617,9 @@ async def discord_polling_task(self):
                     if resp.status == 200:
                         news_data = await resp.json()
                         for guild in self.bot.guilds:
-                            channels = await self.config.guild(guild).discord_channels()
+                            channels = await self.config.guild(guild).repost_channels()
                             if not channels: continue
-                            enabled = await self.config.guild(guild).discord_enabled()
+                            enabled = await self.config.guild(guild).repost_enabled()
                             if not enabled: continue
                             
                             seen_ids = await self.config.guild(guild).discord_last_news_ids()
@@ -2663,9 +2663,9 @@ async def discord_polling_task(self):
                     if resp.status == 200:
                         events_data = await resp.json()
                         for guild in self.bot.guilds:
-                            channels = await self.config.guild(guild).discord_channels()
+                            channels = await self.config.guild(guild).repost_channels()
                             if not channels: continue
-                            enabled = await self.config.guild(guild).discord_enabled()
+                            enabled = await self.config.guild(guild).repost_enabled()
                             if not enabled: continue
                             
                             seen_ids = await self.config.guild(guild).discord_last_events_ids()
