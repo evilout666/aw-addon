@@ -2786,6 +2786,19 @@ Afterwork.discord_polling_task = discord_polling_task
 
 # --- PIN MOVER HELPER AND VIEWS ---
 
+def _delete_after_delay(msg_or_interaction, delay=10):
+    async def _delay_delete():
+        await asyncio.sleep(delay)
+        try:
+            if hasattr(msg_or_interaction, "delete_original_response"):
+                await msg_or_interaction.delete_original_response()
+            else:
+                await msg_or_interaction.delete()
+        except Exception:
+            pass
+    asyncio.create_task(_delay_delete())
+
+
 async def _update_pinmover_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
     destinations = await cog.config.guild(guild).pinmover_destinations()
     
@@ -2834,11 +2847,15 @@ class PinMoverSetDestModal(discord.ui.Modal, title="Set Destination"):
         try:
             chan_id = int(chan_id_str)
         except ValueError:
-            return await interaction.response.send_message("❌ Channel ID must be a valid number.", ephemeral=True)
+            await interaction.response.send_message("❌ Channel ID must be a valid number.", ephemeral=True)
+            _delete_after_delay(interaction)
+            return
 
         chan = interaction.guild.get_channel(chan_id)
         if not chan:
-            return await interaction.response.send_message("❌ Channel not found in this server.", ephemeral=True)
+            await interaction.response.send_message("❌ Channel not found in this server.", ephemeral=True)
+            _delete_after_delay(interaction)
+            return
 
         async with self.cog.config.guild(interaction.guild).pinmover_destinations() as destinations:
             destinations[name] = chan_id
@@ -2846,7 +2863,8 @@ class PinMoverSetDestModal(discord.ui.Modal, title="Set Destination"):
         embed = self.original_message.embeds[0] if self.original_message.embeds else discord.Embed(title="📌 Pin Mover Setup Panel")
         await _update_pinmover_setup_embed(self.cog, interaction.guild, embed)
         await interaction.response.edit_message(embed=embed)
-        await interaction.followup.send(f"✅ Added destination **{name}** mapping to <#{chan_id}>.", ephemeral=True)
+        follow_msg = await interaction.followup.send(f"✅ Added destination **{name}** mapping to <#{chan_id}>.", ephemeral=True)
+        _delete_after_delay(follow_msg)
 
 
 class PinMoverMsgIdModal(discord.ui.Modal):
@@ -2868,6 +2886,11 @@ class PinMoverMsgIdModal(discord.ui.Modal):
         await interaction.response.defer(ephemeral=True)
         
         try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+
+        try:
             await self.select_interaction.edit_original_response(content=f"⏳ Moving message to **{self.dest_name}**...", view=None)
         except Exception:
             pass
@@ -2880,7 +2903,7 @@ class PinMoverMsgIdModal(discord.ui.Modal):
             try:
                 await self.select_interaction.edit_original_response(content=err_msg, view=None)
             except Exception: pass
-            await interaction.followup.send(err_msg, ephemeral=True)
+            _delete_after_delay(self.select_interaction, 10)
             return
 
         # Find the destination channel
@@ -2890,7 +2913,7 @@ class PinMoverMsgIdModal(discord.ui.Modal):
             try:
                 await self.select_interaction.edit_original_response(content=err_msg, view=None)
             except Exception: pass
-            await interaction.followup.send(err_msg, ephemeral=True)
+            _delete_after_delay(self.select_interaction, 10)
             return
 
         # Check permission in destination channel
@@ -2900,14 +2923,14 @@ class PinMoverMsgIdModal(discord.ui.Modal):
             try:
                 await self.select_interaction.edit_original_response(content=err_msg, view=None)
             except Exception: pass
-            await interaction.followup.send(err_msg, ephemeral=True)
+            _delete_after_delay(self.select_interaction, 10)
             return
         if not dest_perms.manage_messages:
             err_msg = f"❌ I need 'Manage Messages' permission in <#{self.dest_channel_id}> to pin messages."
             try:
                 await self.select_interaction.edit_original_response(content=err_msg, view=None)
             except Exception: pass
-            await interaction.followup.send(err_msg, ephemeral=True)
+            _delete_after_delay(self.select_interaction, 10)
             return
 
         # Search for the original message
@@ -2946,7 +2969,7 @@ class PinMoverMsgIdModal(discord.ui.Modal):
             try:
                 await self.select_interaction.edit_original_response(content=err_msg, view=None)
             except Exception: pass
-            await interaction.followup.send(err_msg, ephemeral=True)
+            _delete_after_delay(self.select_interaction, 10)
             return
 
         # Check permission to delete in original channel
@@ -2956,7 +2979,7 @@ class PinMoverMsgIdModal(discord.ui.Modal):
             try:
                 await self.select_interaction.edit_original_response(content=err_msg, view=None)
             except Exception: pass
-            await interaction.followup.send(err_msg, ephemeral=True)
+            _delete_after_delay(self.select_interaction, 10)
             return
 
         # Copy and post the message
@@ -3029,14 +3052,14 @@ class PinMoverMsgIdModal(discord.ui.Modal):
             try:
                 await self.select_interaction.edit_original_response(content=success_msg, view=None)
             except Exception: pass
-            await interaction.followup.send(success_msg, ephemeral=True)
 
         except Exception as e:
             err_msg = f"⚠️ Message was copied, but an error occurred during pinning or deletion: {str(e)}"
             try:
                 await self.select_interaction.edit_original_response(content=err_msg, view=None)
             except Exception: pass
-            await interaction.followup.send(err_msg, ephemeral=True)
+
+        _delete_after_delay(self.select_interaction, 10)
 
 
 class PinMoverSelectDestination(discord.ui.Select):
@@ -3103,6 +3126,7 @@ class PinMoverRemoveDestination(discord.ui.Select):
         await _update_pinmover_setup_embed(self.cog, interaction.guild, embed)
         await self.original_message.edit(embed=embed)
         await interaction.response.edit_message(content=msg, view=None)
+        _delete_after_delay(interaction, 10)
 
 
 class PinMoverRemoveDestinationView(discord.ui.View):
@@ -3140,7 +3164,9 @@ class PinMoverSetupView(discord.ui.View):
         if not await self._check_permission(interaction): return
         destinations = await self.cog.config.guild(interaction.guild).pinmover_destinations()
         if not destinations:
-            return await interaction.response.send_message("❌ No saved destinations configured yet. Please configure one using 'Set Destination'.", ephemeral=True)
+            await interaction.response.send_message("❌ No saved destinations configured yet. Please configure one using 'Set Destination'.", ephemeral=True)
+            _delete_after_delay(interaction, 10)
+            return
 
         await interaction.response.send_message(
             "Select the destination channel for the message:",
@@ -3153,7 +3179,9 @@ class PinMoverSetupView(discord.ui.View):
         if not await self._check_owner(interaction): return
         destinations = await self.cog.config.guild(interaction.guild).pinmover_destinations()
         if not destinations:
-            return await interaction.response.send_message("❌ No saved destinations configured yet.", ephemeral=True)
+            await interaction.response.send_message("❌ No saved destinations configured yet.", ephemeral=True)
+            _delete_after_delay(interaction, 10)
+            return
 
         await interaction.response.send_message(
             "Select the destination channel to remove:",
