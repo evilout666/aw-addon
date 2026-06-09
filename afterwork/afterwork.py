@@ -389,7 +389,7 @@ class EmbedSetupView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Set Channel", style=discord.ButtonStyle.primary, custom_id="embed_set_channel", row=0)
+    @discord.ui.button(label="Channel", style=discord.ButtonStyle.primary, custom_id="embed_set_channel", row=0)
     async def set_channel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
         await interaction.response.send_modal(EmbedNamedChannelSetModal(self.cog, interaction.message))
@@ -464,7 +464,7 @@ class RssSetupView(discord.ui.View):
         if not await self._check_owner(interaction): return
         await interaction.response.send_modal(RssAddFeedModal(self.cog, interaction.message))
 
-    @discord.ui.button(label="Remove", style=discord.ButtonStyle.danger, custom_id="rss_remove_feed_button", row=0, disabled=True)
+    @discord.ui.button(label="Remove", style=discord.ButtonStyle.danger, custom_id="rss_remove_feed_button", row=0)
     async def remove_feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self._check_owner(interaction): return
         await interaction.response.send_message("Please use the command `[p]afterwork rss remove <name>` to remove a feed.", ephemeral=True)
@@ -961,6 +961,9 @@ class Afterwork(commands.Cog, name="Afterwork"):
             discord_last_embeds_ids={},
             discord_last_news_ids={},
             discord_last_events_ids={},
+            # PinMover
+            pinmover_setup_message_id=None,
+            pinmover_destinations={},
         )
 
         self.config.register_global(
@@ -1010,6 +1013,9 @@ class Afterwork(commands.Cog, name="Afterwork"):
 
             if data.get('discord_setup_message_id'):
                 self.bot.add_view(DiscordSetupView(self, initial_enabled=data.get('discord_enabled', False)), message_id=data['discord_setup_message_id'])
+
+            if data.get('pinmover_setup_message_id'):
+                self.bot.add_view(PinMoverSetupView(self), message_id=data['pinmover_setup_message_id'])
 
         self.start_background_loop()
         await self.start_web_server()
@@ -1273,6 +1279,12 @@ class Afterwork(commands.Cog, name="Afterwork"):
         """Deploys the persistent settings panel for Discord Embed Manager."""
         await self.afterwork_discord_deploy(ctx)
 
+    @afterwork_deploy_group.command(name="pinmover")
+    @commands.is_owner()
+    async def afterwork_pinmover_deploy_cmd(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for Pin Mover."""
+        await self.afterwork_pinmover_deploy(ctx)
+
 
     # --- RSS SUBCOMMAND GROUP ---
 
@@ -1390,6 +1402,13 @@ class Afterwork(commands.Cog, name="Afterwork"):
         await self.config.guild(ctx.guild).hide_auto_hide_enabled.set(False)
         await ctx.send("✅ Hidden Category configuration has been fully reset.")
 
+    @afterwork_reset_group.command(name="embed")
+    async def afterwork_reset_embed_cmd(self, ctx: commands.Context):
+        """Clears all Embed settings."""
+        await self.config.guild(ctx.guild).embed_named_channels.set({})
+        await self.config.guild(ctx.guild).embed_setup_message_id.set(None)
+        await ctx.send("✅ Embed Manager configuration has been fully reset.")
+
     @afterwork_reset_group.command(name="discord")
     async def afterwork_reset_discord_cmd(self, ctx: commands.Context):
         """Clears all Discord Embed Manager settings."""
@@ -1436,7 +1455,8 @@ class Afterwork(commands.Cog, name="Afterwork"):
             self.afterwork_tv_deploy,
             self.afterwork_voice_deploy,
             self.afterwork_hide_deploy,
-            self.afterwork_discord_deploy
+            self.afterwork_discord_deploy,
+            self.afterwork_pinmover_deploy
         ]
         
         for sub_cmd in subcommands:
@@ -1612,9 +1632,47 @@ class Afterwork(commands.Cog, name="Afterwork"):
         enabled = await self.config.guild(ctx.guild).discord_enabled()
         msg = await ctx.send(embed=embed, view=DiscordSetupView(self, initial_enabled=enabled))
         try:
-            await msg.pin()
+            await msg.pin(reason="Afterwork Discord Embed Manager Configuration Hub.")
         except Exception: pass
         await self.config.guild(ctx.guild).discord_setup_message_id.set(msg.id)
+
+        try: await ctx.message.delete()
+        except discord.HTTPException: pass
+        await asyncio.sleep(1)
+        try:
+            async for message in ctx.channel.history(limit=5):
+                if message.type == discord.MessageType.pins_add and message.author.id == self.bot.user.id:
+                    await message.delete()
+                    break
+        except Exception: pass
+
+    async def afterwork_pinmover_deploy(self, ctx: commands.Context):
+        """Deploys the persistent settings panel for Pin Mover."""
+        old_message_id = await self.config.guild(ctx.guild).pinmover_setup_message_id()
+        if old_message_id:
+            try:
+                old_message = await ctx.channel.fetch_message(old_message_id)
+                await old_message.delete()
+            except Exception: pass
+
+        embed = discord.Embed(title="📌 Pin Mover Setup Panel", description="Loading...", color=discord.Color.blue())
+        await _update_pinmover_setup_embed(self, ctx.guild, embed)
+        
+        msg = await ctx.send(embed=embed, view=PinMoverSetupView(self))
+        try:
+            await msg.pin(reason="Afterwork Pin Mover Configuration Hub.")
+        except Exception: pass
+        await self.config.guild(ctx.guild).pinmover_setup_message_id.set(msg.id)
+
+        try: await ctx.message.delete()
+        except discord.HTTPException: pass
+        await asyncio.sleep(1)
+        try:
+            async for message in ctx.channel.history(limit=5):
+                if message.type == discord.MessageType.pins_add and message.author.id == self.bot.user.id:
+                    await message.delete()
+                    break
+        except Exception: pass
 
     async def afterwork_hide_deploy(self, ctx: commands.Context):
         """Deploys the persistent settings panel for Hide Category Visibility."""
@@ -2433,9 +2491,10 @@ class DiscordChannelModal(discord.ui.Modal, title="Add Discord Embed Channel"):
         max_length=25
     )
 
-    def __init__(self, cog, **kwargs):
+    def __init__(self, cog, original_message: discord.Message, **kwargs):
         super().__init__(**kwargs)
         self.cog = cog
+        self.original_message = original_message
 
     async def on_submit(self, interaction: discord.Interaction):
         mod_id = self.module_id.value.strip().lower()
@@ -2453,16 +2512,16 @@ class DiscordChannelModal(discord.ui.Modal, title="Add Discord Embed Channel"):
         async with self.cog.config.guild(interaction.guild).discord_channels() as channels:
             channels[mod_id] = chan_id
             
-        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed(title="Manage Discord Setup")
+        embed = self.original_message.embeds[0] if self.original_message.embeds else discord.Embed(title="Discord Embed Manager Setup")
         await _update_discord_setup_embed(self.cog, interaction.guild, embed)
-        await interaction.message.edit(embed=embed)
-        await interaction.response.send_message(f"✅ Set {mod_id} to post to <#{chan_id}>.", ephemeral=True)
+        await interaction.response.edit_message(embed=embed)
+        await interaction.followup.send(f"✅ Set {mod_id} to post to <#{chan_id}>.", ephemeral=True)
 
 
 class DiscordChannelRemoveModal(discord.ui.Modal, title="Remove Target Channel"):
     module_id = discord.ui.TextInput(label="Module Name (e.g. dune)", style=discord.TextStyle.short, required=True, max_length=50)
 
-    def __init__(self, cog, original_message):
+    def __init__(self, cog, original_message: discord.Message):
         super().__init__()
         self.cog = cog
         self.original_message = original_message
@@ -2476,10 +2535,10 @@ class DiscordChannelRemoveModal(discord.ui.Modal, title="Remove Target Channel")
             else:
                 msg = f"❌ Target {mod_id} not found."
                 
-        embed = self.original_message.embeds[0]
+        embed = self.original_message.embeds[0] if self.original_message.embeds else discord.Embed(title="Discord Embed Manager Setup")
         await _update_discord_setup_embed(self.cog, interaction.guild, embed)
-        await self.original_message.edit(embed=embed)
-        await interaction.response.send_message(msg, ephemeral=True)
+        await interaction.response.edit_message(embed=embed)
+        await interaction.followup.send(msg, ephemeral=True)
 
 class DiscordSetupView(discord.ui.View):
     def __init__(self, cog, initial_enabled: bool = False):
@@ -2488,25 +2547,39 @@ class DiscordSetupView(discord.ui.View):
         self.toggle_enable_btn.label = "Disable" if initial_enabled else "Enable"
         self.toggle_enable_btn.style = discord.ButtonStyle.danger if initial_enabled else discord.ButtonStyle.success
 
+    async def _check_owner(self, interaction: discord.Interaction):
+        if not await self.cog.bot.is_owner(interaction.user): 
+            await interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=True)
+            return False
+        return True
+
     @discord.ui.button(label="Channel", style=discord.ButtonStyle.primary, custom_id="discord_add_link")
     async def add_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(DiscordChannelModal(self.cog))
+        if not await self._check_owner(interaction): return
+        await interaction.response.send_modal(DiscordChannelModal(self.cog, interaction.message))
 
     @discord.ui.button(label="Remove", style=discord.ButtonStyle.danger, custom_id="discord_remove_link")
     async def remove_link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_owner(interaction): return
         await interaction.response.send_modal(DiscordChannelRemoveModal(self.cog, interaction.message))
 
     @discord.ui.button(label="Enable/Disable", style=discord.ButtonStyle.secondary, custom_id="discord_toggle_enable")
     async def toggle_enable_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_owner(interaction): return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        
         current = await self.cog.config.guild(interaction.guild).discord_enabled()
         new_state = not current
         await self.cog.config.guild(interaction.guild).discord_enabled.set(new_state)
         
+        button.label = "Disable" if new_state else "Enable"
+        button.style = discord.ButtonStyle.danger if new_state else discord.ButtonStyle.success
+        
         embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed(title="Discord Embed Manager Setup")
         await _update_discord_setup_embed(self.cog, interaction.guild, embed)
         
-        view = DiscordSetupView(self.cog, initial_enabled=new_state)
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.message.edit(embed=embed, view=self)
+        await interaction.followup.send(f"Discord Embed Manager has been **{'enabled' if new_state else 'disabled'}**.", ephemeral=True)
 
 async def _update_discord_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
     channels = await cog.config.guild(guild).discord_channels()
@@ -2516,13 +2589,13 @@ async def _update_discord_setup_embed(cog, guild: discord.Guild, embed: discord.
     embed.clear_fields()
     
     status_str = "🟢 Active" if enabled else "🔴 Inactive"
-    embed.add_field(name="Status", value=status_str, inline=False)
+    embed.add_field(name="System Status", value=status_str, inline=False)
     
     if channels:
         ch_list = [f"**{m}** -> <#{c}>" for m, c in channels.items()]
         embed.add_field(name="Target Channels", value="\n".join(ch_list), inline=False)
     else:
-        embed.add_field(name="Target Channels", value="None configured. Use 'Set Channel'.", inline=False)
+        embed.add_field(name="Target Channels", value="None configured. Use 'Channel'.", inline=False)
     return embed
 
 
@@ -2709,3 +2782,381 @@ async def discord_polling_task(self):
         await asyncio.sleep(60)
 
 Afterwork.discord_polling_task = discord_polling_task
+
+
+# --- PIN MOVER HELPER AND VIEWS ---
+
+async def _update_pinmover_setup_embed(cog, guild: discord.Guild, embed: discord.Embed):
+    destinations = await cog.config.guild(guild).pinmover_destinations()
+    
+    embed.description = "Manage destinations and move/pin messages from other channels."
+    embed.clear_fields()
+    
+    if destinations:
+        dest_list = [f"• **{name}** -> <#{channel_id}> (`{channel_id}`)" for name, channel_id in destinations.items()]
+        embed.add_field(name="Saved Destinations", value="\n".join(dest_list), inline=False)
+    else:
+        embed.add_field(name="Saved Destinations", value="*No destinations configured. Click 'Set Destination' to add one.*", inline=False)
+        
+    embed.add_field(
+        name="How it Works",
+        value="1. **Set Destination**: Save a channel with a name.\n"
+              "2. **Move**: Choose a destination from the dropdown, input a message ID. The bot will find it, copy it to the destination, pin it, and delete the original.\n"
+              "3. **Remove Destination**: Delete a saved destination.",
+        inline=False
+    )
+    return embed
+
+
+class PinMoverSetDestModal(discord.ui.Modal, title="Set Destination"):
+    dest_name = discord.ui.TextInput(
+        label="Destination Name",
+        placeholder="e.g. General, Announcements",
+        required=True,
+        max_length=50
+    )
+    channel_id = discord.ui.TextInput(
+        label="Channel ID",
+        placeholder="e.g. 123456789012345678",
+        required=True,
+        max_length=25
+    )
+
+    def __init__(self, cog, original_message: discord.Message):
+        super().__init__()
+        self.cog = cog
+        self.original_message = original_message
+
+    async def on_submit(self, interaction: discord.Interaction):
+        name = self.dest_name.value.strip()
+        chan_id_str = self.channel_id.value.strip()
+
+        try:
+            chan_id = int(chan_id_str)
+        except ValueError:
+            return await interaction.response.send_message("❌ Channel ID must be a valid number.", ephemeral=True)
+
+        chan = interaction.guild.get_channel(chan_id)
+        if not chan:
+            return await interaction.response.send_message("❌ Channel not found in this server.", ephemeral=True)
+
+        async with self.cog.config.guild(interaction.guild).pinmover_destinations() as destinations:
+            destinations[name] = chan_id
+
+        embed = self.original_message.embeds[0] if self.original_message.embeds else discord.Embed(title="📌 Pin Mover Setup Panel")
+        await _update_pinmover_setup_embed(self.cog, interaction.guild, embed)
+        await interaction.response.edit_message(embed=embed)
+        await interaction.followup.send(f"✅ Added destination **{name}** mapping to <#{chan_id}>.", ephemeral=True)
+
+
+class PinMoverMsgIdModal(discord.ui.Modal):
+    msg_id_input = discord.ui.TextInput(
+        label="Message ID",
+        placeholder="Paste the ID of the message you want to move.",
+        required=True,
+        max_length=30
+    )
+
+    def __init__(self, cog, dest_name: str, dest_channel_id: int, select_interaction: discord.Interaction):
+        super().__init__(title=f"Move Message to {dest_name}"[:45])
+        self.cog = cog
+        self.dest_name = dest_name
+        self.dest_channel_id = dest_channel_id
+        self.select_interaction = select_interaction
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            await self.select_interaction.edit_original_response(content=f"⏳ Moving message to **{self.dest_name}**...", view=None)
+        except Exception:
+            pass
+
+        msg_id_str = self.msg_id_input.value.strip()
+        try:
+            message_id = int(msg_id_str)
+        except ValueError:
+            err_msg = "❌ Message ID must be a valid number."
+            try:
+                await self.select_interaction.edit_original_response(content=err_msg, view=None)
+            except Exception: pass
+            await interaction.followup.send(err_msg, ephemeral=True)
+            return
+
+        # Find the destination channel
+        dest_chan = interaction.guild.get_channel(self.dest_channel_id)
+        if not dest_chan:
+            err_msg = "❌ Destination channel not found."
+            try:
+                await self.select_interaction.edit_original_response(content=err_msg, view=None)
+            except Exception: pass
+            await interaction.followup.send(err_msg, ephemeral=True)
+            return
+
+        # Check permission in destination channel
+        dest_perms = dest_chan.permissions_for(interaction.guild.me)
+        if not dest_perms.send_messages:
+            err_msg = f"❌ I do not have permission to send messages in <#{self.dest_channel_id}>."
+            try:
+                await self.select_interaction.edit_original_response(content=err_msg, view=None)
+            except Exception: pass
+            await interaction.followup.send(err_msg, ephemeral=True)
+            return
+        if not dest_perms.manage_messages:
+            err_msg = f"❌ I need 'Manage Messages' permission in <#{self.dest_channel_id}> to pin messages."
+            try:
+                await self.select_interaction.edit_original_response(content=err_msg, view=None)
+            except Exception: pass
+            await interaction.followup.send(err_msg, ephemeral=True)
+            return
+
+        # Search for the original message
+        message = None
+        # Try interaction channel first
+        if interaction.channel:
+            try:
+                message = await interaction.channel.fetch_message(message_id)
+            except Exception:
+                pass
+
+        if not message:
+            for channel in interaction.guild.text_channels:
+                if channel == interaction.channel:
+                    continue
+                if channel.permissions_for(interaction.guild.me).read_message_history:
+                    try:
+                        message = await channel.fetch_message(message_id)
+                        break
+                    except Exception:
+                        continue
+
+        if not message:
+            for thread in interaction.guild.threads:
+                if thread == interaction.channel:
+                    continue
+                if thread.permissions_for(interaction.guild.me).read_message_history:
+                    try:
+                        message = await thread.fetch_message(message_id)
+                        break
+                    except Exception:
+                        continue
+
+        if not message:
+            err_msg = f"❌ Message with ID `{message_id}` could not be found in any accessible channel."
+            try:
+                await self.select_interaction.edit_original_response(content=err_msg, view=None)
+            except Exception: pass
+            await interaction.followup.send(err_msg, ephemeral=True)
+            return
+
+        # Check permission to delete in original channel
+        orig_perms = message.channel.permissions_for(interaction.guild.me)
+        if not orig_perms.manage_messages:
+            err_msg = f"❌ I need 'Manage Messages' permission in <#{message.channel.id}> to delete the original message."
+            try:
+                await self.select_interaction.edit_original_response(content=err_msg, view=None)
+            except Exception: pass
+            await interaction.followup.send(err_msg, ephemeral=True)
+            return
+
+        # Copy and post the message
+        sent_msg = None
+        webhook_success = False
+
+        if dest_perms.manage_webhooks:
+            try:
+                webhooks = await dest_chan.webhooks()
+                webhook = next((w for w in webhooks if w.name == "Afterwork PinMover"), None)
+                if not webhook:
+                    webhook = await dest_chan.create_webhook(name="Afterwork PinMover", reason="Pin Mover webhook")
+
+                files = []
+                for attachment in message.attachments:
+                    try:
+                        f = await attachment.to_file()
+                        files.append(f)
+                    except Exception:
+                        pass
+
+                sent_msg = await webhook.send(
+                    content=message.content,
+                    username=message.author.display_name,
+                    avatar_url=message.author.display_avatar.url,
+                    embeds=message.embeds,
+                    files=files,
+                    wait=True
+                )
+                webhook_success = True
+            except Exception as e:
+                import logging
+                logging.getLogger("red.Afterwork").error(f"Failed to copy via webhook: {e}", exc_info=True)
+
+        if not webhook_success:
+            # Fallback: send as bot with Author attribution embed
+            embed = discord.Embed(
+                description=message.content or "*No text content*",
+                color=message.author.color or discord.Color.blue(),
+                timestamp=message.created_at
+            )
+            embed.set_author(name=f"{message.author.display_name} ({message.author.id})", icon_url=message.author.display_avatar.url)
+            embed.set_footer(text=f"Moved from #{message.channel.name}")
+
+            embeds = [embed] + message.embeds
+
+            files = []
+            for attachment in message.attachments:
+                try:
+                     f = await attachment.to_file()
+                     files.append(f)
+                except Exception:
+                     pass
+
+            sent_msg = await dest_chan.send(embeds=embeds, files=files)
+
+        # Pin and delete original
+        try:
+            await sent_msg.pin(reason="Pin Mover relocation")
+            await message.delete(reason="Pin Mover relocation")
+            
+            # Delete system pin message to keep the destination clean
+            await asyncio.sleep(1)
+            async for m in dest_chan.history(limit=5):
+                if m.type == discord.MessageType.pins_add and m.author.id == interaction.guild.me.id:
+                    await m.delete()
+                    break
+
+            success_msg = f"✅ Message `{message_id}` successfully moved to <#{self.dest_channel_id}> and pinned. Original deleted."
+            try:
+                await self.select_interaction.edit_original_response(content=success_msg, view=None)
+            except Exception: pass
+            await interaction.followup.send(success_msg, ephemeral=True)
+
+        except Exception as e:
+            err_msg = f"⚠️ Message was copied, but an error occurred during pinning or deletion: {str(e)}"
+            try:
+                await self.select_interaction.edit_original_response(content=err_msg, view=None)
+            except Exception: pass
+            await interaction.followup.send(err_msg, ephemeral=True)
+
+
+class PinMoverSelectDestination(discord.ui.Select):
+    def __init__(self, cog, destinations, original_message: discord.Message):
+        self.cog = cog
+        self.original_message = original_message
+        options = [
+            discord.SelectOption(label=name, value=str(channel_id), description=f"Channel ID: {channel_id}")
+            for name, channel_id in destinations.items()
+        ][:25]
+        super().__init__(
+            placeholder="Choose a destination channel...",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        channel_id = int(self.values[0])
+        dest_name = "Selected Destination"
+        destinations = await self.cog.config.guild(interaction.guild).pinmover_destinations()
+        for name, cid in destinations.items():
+            if cid == channel_id:
+                dest_name = name
+                break
+
+        modal = PinMoverMsgIdModal(self.cog, dest_name, channel_id, interaction)
+        await interaction.response.send_modal(modal)
+
+
+class PinMoverSelectDestinationView(discord.ui.View):
+    def __init__(self, cog, destinations, original_message: discord.Message):
+        super().__init__(timeout=60)
+        self.add_item(PinMoverSelectDestination(cog, destinations, original_message))
+
+
+class PinMoverRemoveDestination(discord.ui.Select):
+    def __init__(self, cog, destinations, original_message: discord.Message):
+        self.cog = cog
+        self.original_message = original_message
+        options = [
+            discord.SelectOption(label=name, value=name, description=f"Channel ID: {channel_id}")
+            for name, channel_id in destinations.items()
+        ][:25]
+        super().__init__(
+            placeholder="Choose a destination to remove...",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        name_to_remove = self.values[0]
+
+        async with self.cog.config.guild(interaction.guild).pinmover_destinations() as destinations:
+            if name_to_remove in destinations:
+                del destinations[name_to_remove]
+                msg = f"✅ Removed destination **{name_to_remove}**."
+            else:
+                msg = f"❌ Destination **{name_to_remove}** not found."
+
+        embed = self.original_message.embeds[0] if self.original_message.embeds else discord.Embed(title="📌 Pin Mover Setup Panel")
+        await _update_pinmover_setup_embed(self.cog, interaction.guild, embed)
+        await self.original_message.edit(embed=embed)
+        await interaction.response.edit_message(content=msg, view=None)
+
+
+class PinMoverRemoveDestinationView(discord.ui.View):
+    def __init__(self, cog, destinations, original_message: discord.Message):
+        super().__init__(timeout=60)
+        self.add_item(PinMoverRemoveDestination(cog, destinations, original_message))
+
+
+class PinMoverSetupView(discord.ui.View):
+    def __init__(self, cog):
+        super().__init__(timeout=None)
+        self.cog = cog
+
+    async def _check_owner(self, interaction: discord.Interaction):
+        if not await self.cog.bot.is_owner(interaction.user):
+            await interaction.response.send_message("Only the bot owner can use this feature.", ephemeral=True)
+            return False
+        return True
+
+    async def _check_permission(self, interaction: discord.Interaction):
+        if await self.cog.bot.is_owner(interaction.user):
+            return True
+        if isinstance(interaction.user, discord.Member) and interaction.user.guild_permissions.manage_messages:
+            return True
+        await interaction.response.send_message("❌ You must be the bot owner or have 'Manage Messages' permission to use this feature.", ephemeral=True)
+        return False
+
+    @discord.ui.button(label="Set Destination", style=discord.ButtonStyle.primary, custom_id="pinmover_set_dest")
+    async def set_dest_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_owner(interaction): return
+        await interaction.response.send_modal(PinMoverSetDestModal(self.cog, interaction.message))
+
+    @discord.ui.button(label="Move", style=discord.ButtonStyle.success, custom_id="pinmover_move")
+    async def move_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_permission(interaction): return
+        destinations = await self.cog.config.guild(interaction.guild).pinmover_destinations()
+        if not destinations:
+            return await interaction.response.send_message("❌ No saved destinations configured yet. Please configure one using 'Set Destination'.", ephemeral=True)
+
+        await interaction.response.send_message(
+            "Select the destination channel for the message:",
+            view=PinMoverSelectDestinationView(self.cog, destinations, interaction.message),
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="Remove Destination", style=discord.ButtonStyle.danger, custom_id="pinmover_remove_dest")
+    async def remove_dest_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self._check_owner(interaction): return
+        destinations = await self.cog.config.guild(interaction.guild).pinmover_destinations()
+        if not destinations:
+            return await interaction.response.send_message("❌ No saved destinations configured yet.", ephemeral=True)
+
+        await interaction.response.send_message(
+            "Select the destination channel to remove:",
+            view=PinMoverRemoveDestinationView(self.cog, destinations, interaction.message),
+            ephemeral=True
+        )
