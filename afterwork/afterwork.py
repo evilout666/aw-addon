@@ -3016,7 +3016,7 @@ class PinMoverMsgIdModal(discord.ui.Modal):
         # Pin and delete original
         try:
             await sent_msg.pin(reason="Pin Mover relocation")
-            await message.delete(reason="Pin Mover relocation")
+            await message.delete()
             
             # Delete system pin message to keep the destination clean
             await asyncio.sleep(1)
